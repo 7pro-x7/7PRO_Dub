@@ -29,7 +29,7 @@ class WhisperEngine(private val context: Context) {
         recognizer?.release()
 
         val dir = ModelStore.modelsDir(context)
-        val (enc, dec) = ModelStore.whisperPaths(dir, modelKey)
+        val (enc, dec, tokens) = ModelStore.whisperPaths(dir, modelKey)
 
         val whisper = OfflineWhisperModelConfig(
             encoder = enc.absolutePath,
@@ -40,7 +40,13 @@ class WhisperEngine(private val context: Context) {
             enableTokenTimestamps = true,
             enableSegmentTimestamps = true,
         )
-        val modelConfig = OfflineModelConfig(whisper = whisper, numThreads = 4, debug = false)
+        // ملف الرموز (tokens) مطلوب من OfflineModelConfig — كان مفقودًا وهو سبب فشل البناء.
+        val modelConfig = OfflineModelConfig(
+            whisper = whisper,
+            tokens = tokens.absolutePath,
+            numThreads = 4,
+            debug = false,
+        )
         val config = OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80, dither = 0f),
             modelConfig = modelConfig,

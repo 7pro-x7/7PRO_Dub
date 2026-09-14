@@ -53,7 +53,13 @@ class PiperEngine(private val context: Context) {
     fun speak(text: String, speed: Float, out: File): Boolean {
         val engine = tts ?: throw IllegalStateException("الصوت العربي غير محمّل")
         val genConfig = GenerationConfig(sid = 0, speed = speed, silenceScale = 0.2f)
-        val audio: GeneratedAudio = engine.generateWithConfig(text, genConfig)
-        return audio.save(out.absolutePath)
+        // ملاحظة: لا توجد دالة generateWithConfig بدون callback في sherpa-onnx —
+        // الاسم الصحيح هو generateWithConfigAndCallback (مع callback يُرجع 1 للمتابعة).
+        val audio: GeneratedAudio = engine.generateWithConfigAndCallback(
+            text = text,
+            config = genConfig,
+            callback = { _ -> 1 },
+        )
+        return audio.save(filename = out.absolutePath)
     }
 }
