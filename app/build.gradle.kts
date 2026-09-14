@@ -67,9 +67,12 @@ dependencies {
     implementation("com.github.k2-fsa:sherpa-onnx:1.13.8")
 
     // ---------- FFmpeg: استخراج/دمج الصوت والفيديو ----------
-    // ملاحظة: البناء "full" يحتوي x264 (GPL) — مناسب للمشروع مفتوح المصدر.
+    // ملاحظة: مكتبة com.arthenica:ffmpeg-kit-full الأصلية تم التوقف عنها وحذفها
+    // من Maven Central بتاريخ 1 أبريل 2025. تم استبدالها بالنسخة المُستمرة صيانتها
+    // (dev.ffmpegkit-maintained) وهي بديل مباشر بنفس الـ API (com.arthenica.ffmpegkit)
+    // وتحتوي على x264 (GPL) — مناسب للمشروع مفتوح المصدر.
     // إن أردت بناء غير GPL استبدله بـ ffmpeg-kit-min (بدون حرق ترجمة).
-    implementation("com.arthenica:ffmpeg-kit-full:6.0.LTS")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-full-gpl:6.0.3")
 
     // ---------- تنزيل النماذج وتحميل روابط الفيديو ----------
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
