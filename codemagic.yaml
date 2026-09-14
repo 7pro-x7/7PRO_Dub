@@ -17,7 +17,9 @@
 workflows:
   android-debug:
     name: ArabicDub — Debug APK
-    instance_type: linux_x4
+    # النسخة الأساسية المتاحة في كل خطط CodeMagic.
+    # إن كان لديك خطة أعلى: linux_x2 أو linux_x4 يسرّع البناء (نفس السكربتات تعمل).
+    instance_type: linux
     max_build_duration: 90
 
     environment:
@@ -54,10 +56,15 @@ workflows:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
 
       - name: بناء Debug APK
+        # الضبط هنا مخصص للحدود القصوى لنسخة linux (1 نواة / 2GB):
+        # حجم ذاكرة Gradle أقل من قيمة gradle.properties، بدون موازاة.
         script: |
           cd "$CM_BUILD_DIR"
           chmod +x gradlew
-          ./gradlew --stacktrace --no-daemon assembleDebug
+          ./gradlew --stacktrace --no-daemon assembleDebug \
+            -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" \
+            -Dorg.gradle.parallel=false \
+            -Dorg.gradle.workers.max=1
 
     artifacts:
       - app/build/outputs/apk/**/*.apk
