@@ -64,7 +64,13 @@ dependencies {
 
     // ---------- المحرك مفتوح المصدر: sherpa-onnx ----------
     // Whisper (تفهم كلام + ترجمة) و Piper (نطق عربي) على الجهاز
-    implementation("com.github.k2-fsa:sherpa-onnx:1.13.8")
+    // ملاحظة: JitPack ينشر هذا المستودع متعدد الوحدات، ويجرّ أحيانًا وحدة
+    // sherpa-onnx-jvm الخاصة بجافا العادية بجانب وحدة أندرويد (AAR) —
+    // وكلتاهما تحتويان نفس الأصناف المُصرَّفة، ما يسبب خطأ "Duplicate class".
+    // نستثني الوحدة غير المطلوبة على أندرويد.
+    implementation("com.github.k2-fsa:sherpa-onnx:1.13.8") {
+        exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
+    }
 
     // ---------- FFmpeg: استخراج/دمج الصوت والفيديو ----------
     // ملاحظة: مكتبة com.arthenica:ffmpeg-kit-full الأصلية تم التوقف عنها وحذفها
