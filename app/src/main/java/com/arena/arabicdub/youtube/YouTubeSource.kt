@@ -72,6 +72,7 @@ class YouTubeSource {
                     }
                 }
                 if (audioUrl == null) continue
+                val resolvedAudioUrl: String = audioUrl ?: continue
 
                 // --- الفيديو ---
                 val mp4Candidates = mutableListOf<Pair<Int, String>>()
@@ -101,7 +102,7 @@ class YouTubeSource {
                 return PipedStream(
                     videoUrl = bestMp4?.second,
                     videoIsMp4 = bestMp4 != null,
-                    audioUrl = audioUrl,
+                    audioUrl = resolvedAudioUrl,
                     title = title,
                 )
             } catch (e: Exception) {

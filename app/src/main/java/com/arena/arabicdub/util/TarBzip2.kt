@@ -1,7 +1,7 @@
 package com.arena.arabicdub.util
 
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.Bzip2CompressorInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.BufferedInputStream
 import java.io.File
 
@@ -18,7 +18,7 @@ object TarBzip2 {
     fun extractTo(archive: File, destDir: File) {
         destDir.mkdirs()
         archive.inputStream().use { raw ->
-            Bzip2CompressorInputStream(BufferedInputStream(raw)).use { bzip2 ->
+            BZip2CompressorInputStream(BufferedInputStream(raw)).use { bzip2 ->
                 TarArchiveInputStream(bzip2).use { tar ->
                     var commonRoot: String? = null
                     var entry = tar.nextEntry
@@ -45,7 +45,8 @@ object TarBzip2 {
                                 target.outputStream().use { out -> tar.copyTo(out) }
                             }
                         }
-                        tar.closeEntry()
+                        // ملاحظة: TarArchiveInputStream ليس لديه closeEntry() (خلافًا لـ ZipInputStream) —
+                        // استدعاء nextEntry مجددًا هو ما يُقدّم القارئ للعنصر التالي.
                         entry = tar.nextEntry
                     }
                 }
