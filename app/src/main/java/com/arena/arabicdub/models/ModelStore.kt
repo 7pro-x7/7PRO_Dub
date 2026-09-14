@@ -41,7 +41,7 @@ object ModelStore {
     // ------------------------- Whisper (تفهم كلام + ترجمة) -------------------------
     // المستودعات: csukuangfj/sherpa-onnx-whisper-* على Hugging Face (نسخ int8 المصغرة).
 
-    private fun whisper(key: String, encoder: String, decoder: String, tokens: String, sizeMb: Int): ModelSpec =
+    private fun whisper(key: String, encoder: String, decoder: String, sizeMb: Int): ModelSpec =
         ModelSpec(
             id = "whisper-$key",
             displayName = "Whisper $key (int8)",
@@ -54,20 +54,15 @@ object ModelStore {
                     "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-$key/resolve/main/$decoder",
                     "whisper-$key-decoder.onnx",
                 ),
-                // ملف الرموز (tokens.txt) — مطلوب من OfflineModelConfig، كان مفقودًا سابقًا.
-                ModelFile(
-                    "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-$key/resolve/main/$tokens",
-                    "whisper-$key-tokens.txt",
-                ),
             ),
             sizeMb = sizeMb,
         )
 
     val whisperModels: Map<String, ModelSpec> = linkedMapOf(
-        "tiny" to whisper("tiny", "tiny-encoder.int8.onnx", "tiny-decoder.int8.onnx", "tiny-tokens.txt", 103),
-        "base" to whisper("base", "base-encoder.int8.onnx", "base-decoder.int8.onnx", "base-tokens.txt", 160),
-        "small" to whisper("small", "small-encoder.int8.onnx", "small-decoder.int8.onnx", "small-tokens.txt", 375),
-        "medium" to whisper("medium", "medium-encoder.int8.onnx", "medium-decoder.int8.onnx", "medium-tokens.txt", 945),
+        "tiny" to whisper("tiny", "tiny-encoder.int8.onnx", "tiny-decoder.int8.onnx", 103),
+        "base" to whisper("base", "base-encoder.int8.onnx", "base-decoder.int8.onnx", 160),
+        "small" to whisper("small", "small-encoder.int8.onnx", "small-decoder.int8.onnx", 375),
+        "medium" to whisper("medium", "medium-encoder.int8.onnx", "medium-decoder.int8.onnx", 945),
     )
 
     // ------------------------- الصوت العربي (Piper ar_JO-kareem) -------------------------
@@ -96,12 +91,8 @@ object ModelStore {
 
     // ------------------------- مسارات الملفات -------------------------
 
-    fun whisperPaths(dir: File, key: String): Triple<File, File, File> =
-        Triple(
-            File(dir, "whisper-$key-encoder.onnx"),
-            File(dir, "whisper-$key-decoder.onnx"),
-            File(dir, "whisper-$key-tokens.txt"),
-        )
+    fun whisperPaths(dir: File, key: String): Pair<File, File> =
+        Pair(File(dir, "whisper-$key-encoder.onnx"), File(dir, "whisper-$key-decoder.onnx"))
 
     fun piperPaths(dir: File): Triple<File, File, File> =
         Triple(

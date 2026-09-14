@@ -4,6 +4,7 @@ import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFmpegSessionCompleteCallback
 import com.arthenica.ffmpegkit.FFprobeKit
+import com.arthenica.ffmpegkit.MediaInformation
 import com.arthenica.ffmpegkit.ReturnCode
 import com.arthenica.ffmpegkit.Statistics
 import com.arthenica.ffmpegkit.StatisticsCallback
@@ -14,8 +15,12 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * غلاف بسيط حول FFmpeg (ffmpeg-kit) للعمليات التي يحتاجها التطبيق:
- * استخراج الصوت، تغيير السرعة، قراءة المدة، والدمج.
+ * غلاف بسيط حول FFmpeg (ffmpeg-kit 6.0) للعمليات التي يحتاجها التطبيق:
+ * استخراج الصوت، تغيير السرعة، قراءة المدة، والتنفيذ مع التقدم.
+ *
+ * ملاحظة: واجهة ffmpeg-kit 6.0 مختلفة عن 5.x — لا يوجد ExecuteProgressCallback
+ * ولا FFprobeKit.probe؛ التقدم يأتي عبر StatisticsCallback والمدة عبر
+ * FFprobeKit.getMediaInformation().
  */
 class Ffmpeg {
 
@@ -27,89 +32,104 @@ class Ffmpeg {
     }
 
     /**
-     * تنفيذ أمر FFmpeg.
+     * تنفيذ أمر FFmpeg وحجب الخيط حتى الانتهاء.
      *
-     * @param args               arguments بدون كلمة "ffmpeg".
-     * @param totalDurationSeconds مدة الملف المُدخل (لحساب نسبة التقدم)؛ اتركها 0 إن كانت غير معروفة.
-     * @param onProgress         يستقبل 0f..1f كلما تقدم التنفيذ (قد لا يُستدعى لبعض الأوامر السريعة).
+     * @param totalSeconds إن كانت أكبر من صفر، يُقدَّر التقدم = (إحصاءات الوقت ÷ المدة الكلية)
+     *                     ويستقبل [onProgress] القيم بين 0 و1. وإلا لا يُستدعى.
+     * @param onProgress   يستقبل 0f..1f كلما تقدم التنفيذ.
      * @return هل نجح الأمر.
      */
     fun run(
         args: List<String>,
+        totalSeconds: Float = 0f,
         onProgress: ((Float) -> Unit)? = null,
-        totalDurationSeconds: Float = 0f,
     ): Boolean {
         val command = args.joinToString(" ")
         val latch = CountDownLatch(1)
         val result = AtomicReference<ReturnCode?>(null)
 
-        val statisticsCb = StatisticsCallback { stats: Statistics ->
-            if (totalDurationSeconds > 0f) {
-                val posSeconds = stats.time / 1000f
-                onProgress?.invoke((posSeconds / totalDurationSeconds).coerceIn(0f, 1f))
+        // تعبيرات object صريحة (لا نعتمد على SAM conversion لضمان التوافق)
+        val statsCb = object : StatisticsCallback {
+            override fun apply(stats: Statistics) {
+                if (onProgress != null && totalSeconds > 0f) {
+                    onProgress((stats.time / totalSeconds).toFloat().coerceIn(0f, 1f))
+                }
             }
         }
-        val completeCb = FFmpegSessionCompleteCallback { session ->
-            result.set(session?.returnCode)
-            currentSession.set(null)
-            latch.countDown()
+        val completeCb = object : FFmpegSessionCompleteCallback {
+            override fun apply(session: FFmpegSession) {
+                result.set(session.returnCode)
+                currentSession.set(null)
+                latch.countDown()
+            }
         }
 
-        val session = FFmpegKit.executeAsync(command, completeCb, null, statisticsCb)
-        currentSession.set(session)
-        // مهلة طويلة: الفيديوهات الطويلة + الترميز قد يستغرقان وقتًا
-        latch.await(3, TimeUnit.HOURS)
+        val session = FFmpegKit.executeAsync(command, completeCb, null, statsCb)
+        if (session != null) currentSession.set(session)
 
+        // مهلة طويلة: الفيديوهات الطويلة + إعادة الترميز قد يستغرقان وقتًا
+        if (!latch.await(3, TimeUnit.HOURS)) {
+            runCatching { session?.cancel() }
+            return false
+        }
         currentSession.set(null)
+
         val rc = result.get()
-        return ReturnCode.isSuccess(rc)
+        return rc != null && ReturnCode.isSuccess(rc)
     }
 
     /** مدة الملف بالثواني (0f إن تعذرت القراءة). */
     fun probeDurationSeconds(file: File): Float {
-        val session = FFprobeKit.getMediaInformation(file.absolutePath) ?: return 0f
-        val info = session.mediaInformation ?: return 0f
-        return info.duration?.toFloatOrNull()?.coerceAtLeast(0f) ?: 0f
+        val mi = mediaInfo(file) ?: return 0f
+        return mi.duration?.toFloatOrNull()?.coerceAtLeast(0f) ?: 0f
     }
 
     /** هل يوجد مسار فيديو في الملف. */
     fun hasVideoTrack(file: File): Boolean {
-        val session = FFprobeKit.getMediaInformation(file.absolutePath) ?: return false
-        val streams = session.mediaInformation?.streams ?: return false
-        return streams.any { it.type == "video" }
+        val mi = mediaInfo(file) ?: return false
+        return mi.streams?.any { it.type == "video" } ?: false
+    }
+
+    /** معلومات الملف عبر ffprobe (null عند الفشل). */
+    private fun mediaInfo(file: File): MediaInformation? {
+        val session =
+            runCatching { FFprobeKit.getMediaInformation(file.absolutePath) }.getOrNull()
+                ?: return null
+        if (!ReturnCode.isSuccess(session.returnCode)) return null
+        return runCatching { session.mediaInformation }.getOrNull()
     }
 
     /**
      * استخراج صوت أحادي 16kHz (الصيغة التي يطلبها Whisper).
      */
-    fun extractAudio16k(input: File, output: File, onProgress: ((Float) -> Unit)? = null): Boolean {
-        val duration = probeDurationSeconds(input)
-        return run(
-            listOf(
-                "-y",
-                "-i", input.absolutePath,
-                "-vn", "-ac", "1", "-ar", "16000",
-                "-c:a", "pcm_s16le",
-                output.absolutePath,
-            ),
-            totalDurationSeconds = duration,
-            onProgress = onProgress,
-        )
-    }
+    fun extractAudio16k(
+        input: File,
+        output: File,
+        onProgress: ((Float) -> Unit)? = null,
+    ): Boolean = run(
+        listOf(
+            "-y",
+            "-i", input.absolutePath,
+            "-vn", "-ac", "1", "-ar", "16000",
+            "-c:a", "pcm_s16le",
+            output.absolutePath,
+        ),
+        totalSeconds = 0f,
+        onProgress = onProgress,
+    )
 
     /**
      * تسريع/إبطاء مقطع الصوت بمعامل [rate] لوضعه داخل نافذة زمنية.
      */
-    fun fitToDuration(input: File, output: File, rate: Float): Boolean =
-        run(
-            listOf(
-                "-y",
-                "-i", input.absolutePath,
-                "-af", tempoFilter(rate),
-                "-ar", "22050",
-                output.absolutePath,
-            ),
-        )
+    fun fitToDuration(input: File, output: File, rate: Float): Boolean = run(
+        listOf(
+            "-y",
+            "-i", input.absolutePath,
+            "-af", tempoFilter(rate),
+            "-ar", "22050",
+            output.absolutePath,
+        ),
+    )
 
     /** يبني سلسلة atempo (نطاقها 0.5..2.0) لأي معامل. */
     private fun tempoFilter(rate: Float): String {

@@ -71,12 +71,13 @@ class YouTubeSource {
                         }
                     }
                 }
-                if (audioUrl == null) continue
-                val resolvedAudioUrl: String = audioUrl ?: continue
+                val finalAudioUrl = audioUrl ?: continue
 
                 // --- الفيديو ---
+                // نفضّل mp4/h264 (ينسخ بدون إعادة ترميز)، وعند غيابه نقبل
+                // أفضل فيديو آخر ويُرمَّز لاحقًا إلى h264.
                 val mp4Candidates = mutableListOf<Pair<Int, String>>()
-                var anyOtherVideo = false
+                val otherCandidates = mutableListOf<Pair<Int, String>>()
                 json.optJSONArray("streams")?.let { arr ->
                     for (i in 0 until arr.length()) {
                         val s = arr.getJSONObject(i)
@@ -85,24 +86,23 @@ class YouTubeSource {
                         if (u.isEmpty()) continue
                         val mime = s.optString("mimeType", "")
                         val height = parseHeight(s.optString("quality", ""))
-                        if (mime == "video/mp4") {
-                            mp4Candidates.add(height to u)
-                        } else {
-                            anyOtherVideo = true
-                        }
+                        if (mime == "video/mp4") mp4Candidates.add(height to u)
+                        else otherCandidates.add(height to u)
                     }
                 }
-                if (mp4Candidates.isEmpty() && !anyOtherVideo) continue
+                if (mp4Candidates.isEmpty() && otherCandidates.isEmpty()) continue
 
-                val bestMp4 = mp4Candidates
-                    .filter { it.first <= 720 }
-                    .maxByOrNull { it.first }
-                    ?: mp4Candidates.minByOrNull { it.first }
+                fun pickBest(candidates: List<Pair<Int, String>>): Pair<Int, String>? =
+                    candidates.filter { it.first <= 720 }.maxByOrNull { it.first }
+                        ?: candidates.minByOrNull { it.first }
+
+                val bestMp4 = pickBest(mp4Candidates)
+                val bestVideo = bestMp4 ?: pickBest(otherCandidates)
 
                 return PipedStream(
-                    videoUrl = bestMp4?.second,
+                    videoUrl = bestVideo?.second,
                     videoIsMp4 = bestMp4 != null,
-                    audioUrl = resolvedAudioUrl,
+                    audioUrl = finalAudioUrl,
                     title = title,
                 )
             } catch (e: Exception) {

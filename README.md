@@ -63,11 +63,33 @@
 
 ### الخطوات
 1. افتح المجلد في Android Studio: **File → Open** واختر مجلد `ArabicDub`.
-2. انتظر مزامنة Gradle (سيتنزل `sherpa-onnx` من JitPack و`ffmpeg-kit` من Maven Central).
+2. انتظر مزامنة Gradle — **أول بناء فقط** سينزّل AAR `sherpa-onnx` (من GitHub Releases)
+   وAAR `ffmpeg-kit` (من مرايا موثوقة) إلى مجلد `local-maven/` مع التحقق من بصمات
+   SHA-256 (ينفَّذ ذلك تلقائيًا من سكربت الجذر `build.gradle.kts`، ولا يحتاج أي يد).
 3. **Run ▶** على الجهاز.
 4. في أول تشغيل، اختر مصدر الفيديو واضغط «دبلج» — ستنزَّل النماذج تلقائيًا مع شريط تقدم.
 
 > من سطر الأوامر: `./gradlew assembleDebug`
+
+### البناء على CodeMagic (CI)
+المشروع يتضمن `codemagic.yaml` جاهزًا:
+
+1. ارفع المستودع إلى GitHub (أو GitLab/Bitbucket).
+2. في [CodeMagic](https://codemagic.io): **New App** → اختر المستودع →
+   Build type: **Use custom configuration** (سيكتشف `codemagic.yaml` تلقائيًا).
+3. شغّل البناء — النتيجة: `app/build/outputs/apk/debug/app-debug.apk` في **Artifacts**
+   (مع إشعار بريد إلكتروني عند النجاح/الفشل إن أضفت `publishing`).
+
+تفاصيل مضمونة في الإعداد:
+- **JDK 17** (متطلب AGP 8) عبر `environment.java` + خطوة بحث احتياطية.
+- `sdk.dir` يُضبط من `$ANDROID_SDK_ROOT`.
+- البناء `assembleDebug` — لا يحتاج أي أسرار توقيع.
+- تخزين مؤقت لـ `~/.gradle` و`local-maven/` — تنزيل الأرتيفاكثين الكبيرين (~115 م.ب)
+  يتم مرة واحدة فقط لكل بيئة.
+
+> ملاحظة: مشروع ffmpeg-kit توقف عن الصيانة (يوليو 2026) وزالت أرتيفاكثه من
+> Maven Central الرئيسي؛ لذا يثبّتها المشروع من مرايا موثّقة مع **تحقق بصمة SHA-256**
+> — أي تغيّر في الملف يُفشل البناء بوضوح بدل أن ينتج نسخة معطوبة بصمت.
 
 ### تنزيل النماذج مسبقًا (اختياري)
 ```bash

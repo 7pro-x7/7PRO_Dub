@@ -45,8 +45,8 @@ object TarBzip2 {
                                 target.outputStream().use { out -> tar.copyTo(out) }
                             }
                         }
-                        // ملاحظة: TarArchiveInputStream ليس لديه closeEntry() (خلافًا لـ ZipInputStream) —
-                        // استدعاء nextEntry مجددًا هو ما يُقدّم القارئ للعنصر التالي.
+                        // في tar لا توجد closeEntry — القراءة محصورة داخل المدخل،
+                        // وgetNextEntry() ينتقل تلقائيًا إلى الترويسة التالية
                         entry = tar.nextEntry
                     }
                 }

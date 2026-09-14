@@ -52,9 +52,9 @@ fun ResultScreen(
     val file = state.resultFile ?: return
 
     val player = remember(file) {
-        ExoPlayer.Builder(context)
-            .setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
-            .build()
+        ExoPlayer.Builder(context).build().also {
+            it.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+        }
     }
     DisposableEffect(player) {
         player.play()

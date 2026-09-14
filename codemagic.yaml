@@ -1,83 +1,63 @@
+# ============================================================================
+#  ArabicDub — CodeMagic CI
+# ============================================================================
+#  كيف تفعّل:
+#   1. ارفع هذا المستودع إلى GitHub/GitLab/Bitbucket.
+#   2. في CodeMagic: New App → اختر المستودع → Build type: "Use custom
+#      configuration" وسيكتشف codemagic.yaml تلقائيًا.
+#   3. شغّل البناء — سيُنتج APK جيت-أوب في "Artifacts" مع كل بناء.
+#
+#  ملاحظات:
+#   - AGP 8.5 يتطلب JDK 17 (مشغّل هنا عبر environment.java + خطوة احتياطية).
+#   - بناء debug لا يحتاج أي أسرار توقيع.
+#   - الأرتيفاكثان الكبيران (sherpa-onnx + ffmpeg-kit) ينزّلهما مشروع Gradle
+#     نفسه عند أول بناء مع التحقق من بصمات SHA-256 — لا إعداد إضافي مطلوب.
+# ============================================================================
+
 workflows:
   android-debug:
-    name: ArabicDub - Debug Build
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      groups:
-        - keystore_credentials  # اختياري: يمكن حذفه إن لم تستخدمه في هذا الـ workflow
-      vars:
-        PACKAGE_NAME: "com.arena.arabicdub"
-      java: 17
-    triggering:
-      events:
-        - push
-        - pull_request
-      branch_patterns:
-        - pattern: '*'
-          include: true
-          source: true
-    scripts:
-      - name: إعطاء صلاحية تنفيذ لملف gradlew
-        script: |
-          chmod +x ./gradlew
-      - name: بناء نسخة Debug APK
-        script: |
-          ./gradlew assembleDebug --stacktrace
-    artifacts:
-      - app/build/outputs/apk/debug/*.apk
-      - app/build/outputs/**/mapping.txt
-    publishing:
-      email:
-        recipients:
-          - user@example.com
-        notify:
-          success: true
-          failure: true
+    name: ArabicDub — Debug APK
+    instance_type: linux4
+    max_build_duration: 90
 
-  android-release:
-    name: ArabicDub - Release Build
-    max_build_duration: 60
-    instance_type: mac_mini_m2
     environment:
-      groups:
-        - keystore_credentials  # يحتوي: CM_KEYSTORE, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD
-      vars:
-        PACKAGE_NAME: "com.arena.arabicdub"
       java: 17
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: 'v*.*.*'
-          include: true
+
+    cache:
+      cache_paths:
+        - $HOME/.gradle
+        - $CM_BUILD_DIR/local-maven
+
     scripts:
-      - name: إعطاء صلاحية تنفيذ لملف gradlew
+      - name: عرض البيئة
         script: |
-          chmod +x ./gradlew
-      - name: إعداد ملف التوقيع (keystore)
+          set -x
+          echo "CM_BUILD_DIR=$CM_BUILD_DIR"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+      - name: التأكد من JDK 17
         script: |
-          if [ -n "$CM_KEYSTORE" ]; then
-            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/app/keystore.jks
-            cat > $CM_BUILD_DIR/keystore.properties <<EOF
-          storeFile=keystore.jks
-          storePassword=$CM_KEYSTORE_PASSWORD
-          keyAlias=$CM_KEY_ALIAS
-          keyPassword=$CM_KEY_PASSWORD
-          EOF
-          else
-            echo "لم يتم توفير بيانات التوقيع (keystore_credentials) — سيتم إيقاف عملية النشر الموقّعة."
+          set -e
+          if ! java -version 2>&1 | head -1 | grep -q '"17'; then
+            for d in /usr/lib/jvm/zulu-17* /usr/lib/jvm/*17* /usr/lib/jvm/openjdk-17*; do
+              if [ -x "$d/bin/java" ]; then
+                export JAVA_HOME="$d"
+                export PATH="$JAVA_HOME/bin:$PATH"
+                break
+              fi
+            done
           fi
-      - name: بناء نسخة Release APK
+          java -version
+
+      - name: إعداد مسار Android SDK
         script: |
-          ./gradlew assembleRelease --stacktrace
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+
+      - name: بناء Debug APK
+        script: |
+          cd "$CM_BUILD_DIR"
+          chmod +x gradlew
+          ./gradlew --stacktrace --no-daemon assembleDebug
+
     artifacts:
-      - app/build/outputs/apk/release/*.apk
-      - app/build/outputs/**/mapping.txt
-    publishing:
-      email:
-        recipients:
-          - user@example.com
-        notify:
-          success: true
-          failure: true
+      - app/build/outputs/apk/**/*.apk

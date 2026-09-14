@@ -165,7 +165,8 @@ class DubbingPipeline(private val context: Context) {
                             "-c:a", "libmp3lame", "-b:a", "192k",
                             output.absolutePath,
                         ),
-                        { p -> onEvent(DubEvent.Progress(p)) },
+                        totalSeconds = ffmpeg.probeDurationSeconds(finalAudio),
+                        onProgress = { p -> onEvent(DubEvent.Progress(p)) },
                     )
                 ) {
                     throw IOException("فشل إنشاء الملف الصوتي")
@@ -335,33 +336,43 @@ class DubbingPipeline(private val context: Context) {
                 "-c:a", "pcm_s16le",
                 out.absolutePath,
             ),
-            { p -> onEvent(DubEvent.Progress(p)) },
+            totalSeconds = ffmpeg.probeDurationSeconds(originalAudio),
+            onProgress = { p -> onEvent(DubEvent.Progress(p)) },
         )
         if (!ok) throw IOException("فشل دمج المسارات الصوتية")
     }
 
-    /** دمج الفيديو مع المسار الجديد دون إعادة ترميز الصورة (copy). */
+    /**
+     * دمج الفيديو مع المسار الجديد.
+     * - إذا كان الفيديو mp4/h264: نسخ الصورة دون إعادة ترميز (copy) — أسرع.
+     * - وإلا (webm/av1/...) نعيد ترميز الصورة إلى h264 حتى يعمل الحاوية mp4.
+     */
     private suspend fun muxWithVideo(
         source: Source,
         finalAudio: File,
         out: File,
         onEvent: (DubEvent) -> Unit,
-    ): Boolean = ffmpeg.run(
-        listOf(
-            "-y",
-            "-i", source.videoFile.absolutePath,
-            "-i", finalAudio.absolutePath,
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-shortest",
-            out.absolutePath,
-        ),
-        { p -> onEvent(DubEvent.Progress(p)) },
-    )
+    ): Boolean {
+        val videoCodec = if (source.videoIsMp4) listOf("-c:v", "copy")
+        else listOf("-c:v", "libx264", "-preset", "veryfast", "-crf", "20")
+        return ffmpeg.run(
+            listOf(
+                "-y",
+                "-i", source.videoFile.absolutePath,
+                "-i", finalAudio.absolutePath,
+                "-map", "0:v:0", "-map", "1:a:0",
+                *videoCodec.toTypedArray(),
+                "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                out.absolutePath,
+            ),
+            totalSeconds = ffmpeg.probeDurationSeconds(source.videoFile),
+            onProgress = { p -> onEvent(DubEvent.Progress(p)) },
+        )
+    }
 
     /**
      * حرق الترجمة العربية داخل الفيديو (يتطلب إعادة ترميز libx264).
-     * إن تعذر (مثلاً فيديو webm/av1) نعيد الترميز أيضًا.
      */
     private suspend fun burnSubtitles(
         source: Source,
@@ -378,18 +389,23 @@ class DubbingPipeline(private val context: Context) {
                 "-y",
                 "-i", source.videoFile.absolutePath,
                 "-i", finalAudio.absolutePath,
-                "-vf", "subtitles=${assFile.absolutePath}:fontsdir=${fontsDir}",
+                "-vf", "subtitles=${escapeFilterPath(assFile.absolutePath)}:fontsdir=${escapeFilterPath(fontsDir)}",
                 "-map", "0:v:0", "-map", "1:a:0",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
                 "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
                 out.absolutePath,
             ),
-            { p -> onEvent(DubEvent.Progress(p)) },
+            totalSeconds = ffmpeg.probeDurationSeconds(source.videoFile),
+            onProgress = { p -> onEvent(DubEvent.Progress(p)) },
         )
         assFile.delete()
         return ok
     }
+
+    /** يحمي مسارًا من رموز فصل الفلاتر الخاصة بـ FFmpeg. */
+    private fun escapeFilterPath(path: String): String =
+        path.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
     /** نسخ ملف المحتوى المحلي إلى مساحة العمل وإرجاع (الملف، الاسم). */
     private suspend fun copyLocalVideo(uri: Uri, work: File): Pair<File, String> {
