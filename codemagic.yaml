@@ -1,0 +1,83 @@
+workflows:
+  android-debug:
+    name: ArabicDub - Debug Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - keystore_credentials  # اختياري: يمكن حذفه إن لم تستخدمه في هذا الـ workflow
+      vars:
+        PACKAGE_NAME: "com.arena.arabicdub"
+      java: 17
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: '*'
+          include: true
+          source: true
+    scripts:
+      - name: إعطاء صلاحية تنفيذ لملف gradlew
+        script: |
+          chmod +x ./gradlew
+      - name: بناء نسخة Debug APK
+        script: |
+          ./gradlew assembleDebug --stacktrace
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
+      - app/build/outputs/**/mapping.txt
+    publishing:
+      email:
+        recipients:
+          - user@example.com
+        notify:
+          success: true
+          failure: true
+
+  android-release:
+    name: ArabicDub - Release Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - keystore_credentials  # يحتوي: CM_KEYSTORE, CM_KEYSTORE_PASSWORD, CM_KEY_ALIAS, CM_KEY_PASSWORD
+      vars:
+        PACKAGE_NAME: "com.arena.arabicdub"
+      java: 17
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*.*.*'
+          include: true
+    scripts:
+      - name: إعطاء صلاحية تنفيذ لملف gradlew
+        script: |
+          chmod +x ./gradlew
+      - name: إعداد ملف التوقيع (keystore)
+        script: |
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/app/keystore.jks
+            cat > $CM_BUILD_DIR/keystore.properties <<EOF
+          storeFile=keystore.jks
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          keyPassword=$CM_KEY_PASSWORD
+          EOF
+          else
+            echo "لم يتم توفير بيانات التوقيع (keystore_credentials) — سيتم إيقاف عملية النشر الموقّعة."
+          fi
+      - name: بناء نسخة Release APK
+        script: |
+          ./gradlew assembleRelease --stacktrace
+    artifacts:
+      - app/build/outputs/apk/release/*.apk
+      - app/build/outputs/**/mapping.txt
+    publishing:
+      email:
+        recipients:
+          - user@example.com
+        notify:
+          success: true
+          failure: true
