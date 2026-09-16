@@ -4,28 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- كبسولة المايك -->
     <path
-        android:fillColor="#64B5F6"
-        android:pathData="M44,32 H64 A12,12 0 0 1 76,44 V52 A12,12 0 0 1 64,64 H44 A12,12 0 0 1 32,52 V44 A12,12 0 0 1 44,32 Z" />
-    <!-- قوس حامل المايك -->
+        android:fillColor="#4F7DF9"
+        android:pathData="M30,72 L44,58 L54,66 L78,38 L78,50 L54,78 L44,70 L30,84 Z" />
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#64B5F6"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M28,58 A26,26 0 0 0 80,58" />
-    <!-- العمود والقاعدة -->
+        android:fillColor="#2ECC71"
+        android:pathData="M28,30 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#64B5F6"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M54,84 V90" />
+        android:fillColor="#F5B041"
+        android:pathData="M44,30 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#64B5F6"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M42,90 H66" />
+        android:fillColor="#E74C3C"
+        android:pathData="M60,30 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
 </vector>

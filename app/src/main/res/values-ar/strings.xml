@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">كراش لاب</string>
+    <string name="tagline">تحليل إحصائي للجولات السابقة — وليس توقعًا</string>
+    <string name="disclaimer_short">هذا التطبيق يحلل الجولات السابقة فقط. لا يمكنه توقع النتائج القادمة ولا يضمن أي أرباح.</string>
+    <string name="responsible_gambling">المقامرة تنطوي على مخاطر. العب بمسؤولية، 18+.</string>
+</resources>

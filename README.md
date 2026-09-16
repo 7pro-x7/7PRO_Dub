@@ -1,166 +1,157 @@
-# دُبّل — ArabicDub 🎙️
+# CrashLab — Crash/Aviator History Analyzer
 
-تطبيق أندرويد مبني بـ **Kotlin + Jetpack Compose** يقوم **بدبلجة الفيديوهات من الإنجليزية إلى العربية**:
-يستمع إلى الصوت الإنجليزي، يترجمه إلى العربية، يولّد كلامًا عربيًا طبيعيًا، يخلطه مع الفيديو مع الحفاظ على
-الموسيقى والأصوات الأصلية بصوت خافت، ويحرق الترجمة النصية أسفل الشاشة.
+An offline Android app that performs **descriptive statistical analysis on crash-game
+rounds that have already happened**. It does not predict future rounds, and it cannot.
 
-**مجاني بالكامل** — كل المعالجة تتم على جهازك باستخدام أدوات **مفتوحة المصدر**:
-
-| المكوّن | الأداة | الترخيص | الدور |
-|---|---|---|---|
-| تفهم الكلام (ASR) | [Whisper](https://github.com/openai/whisper) عبر [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Apache-2.0 | تحويل الصوت الإنجليزي إلى نصوص مؤقتة |
-| الترجمة | [MyMemory](https://mymemory.translated.net) (خدمة مجانية مفتوحة) أو Whisper محليًا | مجاني | الإنجليزية → العربية |
-| توليد الكلام (TTS) | [Piper](https://github.com/rhasspy/piper) بصوت `ar_JO-kareem` عبر sherpa-onnx | MIT | نطق الجمل العربية |
-| معالجة الفيديو | [FFmpeg](https://ffmpeg.org) عبر [ffmpeg-kit](https://github.com/arthenica/ffmpeg-kit) | GPL (full) | استخراج/دمج/ترميز/حرق ترجمة |
-| جلب يوتيوب | [Piped](https://github.com/TeamPiped/Piped) API | AGPL-3.0 | جلب روابط البث من يوتيوب |
-| المشغل | [Media3 (ExoPlayer)](https://developer.android.com/media/media3) | Apache-2.0 | عرض النتيجة |
-| الواجهة | [Jetpack Compose](https://developer.android.com/jetpack/compose) Material 3 | Apache-2.0 | واجهة عربية RTL |
-
-> **ملاحظة ترخيص:** بناء `ffmpeg-kit-full` يحتوي `x264` (GPL). المشروع مناسب للتحديد
-> كمشروع مفتوح المصدر. إن أردت توزيعًا غير GPL، استبدل الاعتماد بـ
-> `com.arthenica:ffmpeg-kit-min` (يفقد فقط حرق الترجمة النصية — كل ما عداها يعمل).
+> **This app does not predict the next round and does not guarantee profits.**
+> Crash outcomes come from a random number generator. Each round is statistically
+> independent of every round before it. No analysis of past results — and no staking
+> strategy — can produce an edge over the house.
 
 ---
 
-## كيف يعمل؟ (خط الإنتاج)
+## Build
 
-```
-┌─────────────┐   ┌──────────────┐   ┌───────────────┐   ┌─────────────┐
-│ 1. المصدر    │ → │ 2. استخراج    │ → │ 3. Whisper     │ → │ 4. الترجمة  │
-│ ملف/يوتيوب  │   │ صوت 16kHz    │   │ (إنجليزي+توقيت)│   │ إلى العربية │
-└─────────────┘   └──────────────┘   └───────────────┘   └─────────────┘
-                                                              │
-┌─────────────┐   ┌──────────────┐   ┌───────────────┐        │
-│ 8. الحفظ     │ ← │ 7. دمج الفيديو│ ← │ 6. دمج الصوت   │ ← ┌─────────────┐
-│ Movies/ArabicDub│ │ (+حرق ترجمة) │   │ (FFmpeg mix) │   │ 5. Piper TTS│
-└─────────────┘   └──────────────┘   └───────────────┘   │ صوت عربي لكل │
-                                                          │ جملة + توقيت │
-                                                          └─────────────┘
-```
-
-1. **المصدر**: ملف من الجهاز (فيديو/صوت) أو رابط يوتيوب (عبر خوادم Piped العامة، حتى 720p).
-2. **استخراج الصوت**: `ffmpeg -vn -ac 1 -ar 16000` للحصول على WAV أحادي 16kHz.
-3. **التعرف على الكلام**: Whisper int8 محليًا (tiny/base/small/medium) مع **توقيتات لكل توكن**،
-   ثم تجميعها في جمل حسب الانقطاعات والعلامات.
-4. **الترجمة**:
-   - الافتراضي: MyMemory (خدمة مجانية — تحتاج إنترنت، ~5000 حرف يوميًا بدون حساب).
-   - أو `Whisper task=translate`: ترجمة كاملة محليًا بدون إنترنت (الأدق مع small/medium).
-5. **توليد الكلام**: كل جملة تُنطق بصوت Piper العربي، ثم تُسرَّع (حتى 2x) لتتناسب مع نافذتها الزمنية.
-6. **الدمج الصوتي**: `filter_complex` بفلتر `adelay` (توقيت كل جملة) + `amix` مع الصوت الأصلي
-   المخفَّض بنسبة قابلة للضبط (0–100%).
-7. **العرض النهائي**: دمج المسار الصوتي مع الفيديو (`-c:v copy`)، مع خيار **حرق الترجمة العربية**
-   (ملف ASS بخط Noto Naskh Arabic، يتطلب إعادة ترميز `libx264`).
-8. **الحفظ**: في `Movies/ArabicDub` عبر MediaStore.
-
----
-
-## التشغيل
-
-### المتطلبات
-- **Android Studio** (Hedgehog أو أحدث) + JDK 17.
-- جهاز/محاكي بـ **Android 7.0 (API 24)+**. يُفضّل arm64-v8a و 6GB+ رام (النماذج الأكبر).
-- اتصال إنترنت **أول مرة فقط** لتنزيل النماذج (يُنصح بالواي فاي).
-
-### الخطوات
-1. افتح المجلد في Android Studio: **File → Open** واختر مجلد `ArabicDub`.
-2. انتظر مزامنة Gradle — **أول بناء فقط** سينزّل AAR `sherpa-onnx` (من GitHub Releases)
-   وAAR `ffmpeg-kit` (من مرايا موثوقة) إلى مجلد `local-maven/` مع التحقق من بصمات
-   SHA-256 (ينفَّذ ذلك تلقائيًا من سكربت الجذر `build.gradle.kts`، ولا يحتاج أي يد).
-3. **Run ▶** على الجهاز.
-4. في أول تشغيل، اختر مصدر الفيديو واضغط «دبلج» — ستنزَّل النماذج تلقائيًا مع شريط تقدم.
-
-> من سطر الأوامر: `./gradlew assembleDebug`
-
-### البناء على CodeMagic (CI)
-المشروع يتضمن `codemagic.yaml` جاهزًا:
-
-1. ارفع المستودع إلى GitHub (أو GitLab/Bitbucket).
-2. في [CodeMagic](https://codemagic.io): **New App** → اختر المستودع →
-   Build type: **Use custom configuration** (سيكتشف `codemagic.yaml` تلقائيًا).
-3. شغّل البناء — النتيجة: `app/build/outputs/apk/debug/app-debug.apk` في **Artifacts**
-   (مع إشعار بريد إلكتروني عند النجاح/الفشل إن أضفت `publishing`).
-
-تفاصيل مضمونة في الإعداد:
-- **JDK 17** (متطلب AGP 8) عبر `environment.java` + خطوة بحث احتياطية.
-- `sdk.dir` يُضبط من `$ANDROID_SDK_ROOT`.
-- البناء `assembleDebug` — لا يحتاج أي أسرار توقيع.
-- تخزين مؤقت لـ `~/.gradle` و`local-maven/` — تنزيل الأرتيفاكثين الكبيرين (~115 م.ب)
-  يتم مرة واحدة فقط لكل بيئة.
-
-> ملاحظة: مشروع ffmpeg-kit توقف عن الصيانة (يوليو 2026) وزالت أرتيفاكثه من
-> Maven Central الرئيسي؛ لذا يثبّتها المشروع من مرايا موثّقة مع **تحقق بصمة SHA-256**
-> — أي تغيّر في الملف يُفشل البناء بوضوح بدل أن ينتج نسخة معطوبة بصمت.
-
-### تنزيل النماذج مسبقًا (اختياري)
 ```bash
-./scripts/download_models.sh                 # ينزّل base (160 م.ب)
-WHISPER_KEY=small ./scripts/download_models.sh
-./scripts/push_models_to_device.sh           # عبر adb
+# Requires JDK 17 and the Android SDK (API 34)
+./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk
+./gradlew test                 # run the unit test suite
+./gradlew installDebug         # install on a connected device
 ```
 
-| نموذج Whisper | الحجم (int8) | الجودة |
-|---|---|---|
-| tiny | ~103 م.ب | سريعة، مناسبة للتجربة |
-| base (الافتراضي) | ~160 م.ب | توازن جيد |
-| small | ~375 م.ب | أدق |
-| medium | ~945 م.ب | الأدق (يحتاج هاتفًا قويًا) |
+Or open the folder in **Android Studio** (Hedgehog or newer) and press Run.
 
-الصوت العربي Piper `ar_JO-kareem-medium`: ~67 م.ب (يُنزَّل مرة واحدة).
+| Setting | Value |
+|---|---|
+| Language | Kotlin 1.9.24 |
+| UI | Jetpack Compose + Material 3 |
+| Min SDK | 24 (Android 7.0) |
+| Target SDK | 34 |
+| Database | Room |
+| Permissions | **none** — no `INTERNET` permission at all |
 
 ---
 
-## بنية المشروع
+## Screens
 
-```
-app/src/main/java/com/arena/arabicdub/
-├── MainActivity.kt              # النشاط + التنقل بين الشاشات + أذونات الحفظ
-├── domain/DubModels.kt          # مراحل الإنتاج، الإعدادات، المقاطع، الأحداث
-├── pipeline/DubbingPipeline.kt  # ⭐ المنسّق الكامل لخط الدبلجة (8 مراحل)
-├── ffmpeg/Ffmpeg.kt             # غلاف ffmpeg-kit: تنفيذ/تقدم/إلغاء/استعلام
-├── asr/WhisperEngine.kt         # تحميل وتشغيل Whisper + تجميع الجمل الموقّتة
-├── tts/PiperEngine.kt           # تحميل وتشغيل Piper العربي
-├── translate/MyMemoryTranslator.kt # الترجمة المجانية عبر الإنترنت
-├── youtube/YouTubeSource.kt     # جلب الفيديو/الصوت عبر Piped (عدة خوادم)
-├── models/ModelStore.kt         # تنزيل النماذج وفك ضغطها على الجهاز
-├── subs/AssWriter.kt            # توليد ملف الترجمة ASS بالخط العربي
-├── util/                        # الحفظ في المكتبة، المشاركة، فك tar.bz2
-└── ui/                          # Compose: ViewModel + 4 شاشات (RTL)
-```
+| Tab | Purpose |
+|---|---|
+| **Overview** | Traffic-light volatility read-out 🟢🟡🔴, headline stats, distribution, randomness checks |
+| **Trends** | Cash-out reach rates vs. the theoretical curve, confidence intervals, percentiles |
+| **Simulate** | Backtests staking plans on your own data + 300-run bootstrap showing the spread |
+| **Log** | Manual entry, bulk paste/CSV import, per-platform tagging, history management |
+| **Safety** | How crash games work, myth debunking, session limits, support helplines |
 
 ---
 
-## نصائح وتحكمات
+## Architecture
 
-- **جودة أفضل**: اختر `small` أو `medium` في الإعدادات (أبطأ وأثقل).
-- **بدون إنترنت نهائيًا**: عطّل «الترجمة عبر MyMemory» لتستخدم ترجمة Whisper المحلية.
-- **الصوت الأصلي**: اسحب شريط «مستوى الصوت الأصلي» — 0% يعني حذف الحوار الإنجليزي تمامًا.
-- **الفيديوهات الطويلة**: المعالجة محلية؛ دقيقة فيديو ≈ 3–10 دقائق معالجة حسب النموذج والجهاز.
-- **الفيديوهات ذات الموسيقى التصويرية**: تعمل الدبلجة أفضل على الكلام الواضح
-  (بودكاست، محاضرات، أنباء). الغناء لا يُترجم.
+```
+domain/     Models.kt, StatsEngine.kt, StrategySimulator.kt   ← pure Kotlin, fully unit-tested
+data/       Room database, repository, DataStore settings
+ui/         theme/, components/ (custom Canvas charts), screens/, vm/
+```
 
-## الأسئلة الشائعة
-
-**هل التطبيق يُخالف شروط يوتيوب؟**
-يستخدم Piped (مشروع مفتوح) لجلب البث، وهو بديل قانوني التصميم للاستخدام الشخصي.
-لا تُوزّع المحتوى المُعاد دبلجته دون إذن صاحبه.
-
-**لماذا تنزيل يوتيوب حتى 720p فقط؟**
-لتقليل مساحة التخزين والوقت — الدبلجة الصوتية لا تحتاج 4K.
-
-**أين تُحفظ الملفات المؤقتة؟**
-في `cache/dub-*` وتُحذف تلقائيًا بعد كل تشغيل (نجاحًا كان أو فشلًا).
-
-**هل يمكن تغيير الصوت العربي؟**
-نعم — أي صوت Piper يدعمه sherpa-onnx (مثلًا `ar_JO-kareem` هو الوحيد عربي حاليًا).
-أضف حزمته إلى `ModelStore.kt` وغيّر المسارات في `PiperEngine.kt`.
-
-## أفكار للتطوير
-- اختيار اللهجة/الصوت العربي + سرعة الصوت من الواجهة.
-- دبلجة متعددة (صوتان للحوارات).
-- تصدير ملف SRT/ASS منفصلًا.
-- معالجة مقاطع طويلة على الخادم (اختياري).
-- واجهة تعديل الجمل قبل توليد الصوت.
+The `domain` package has no Android dependencies, so the entire analytical core runs
+on the JVM and is covered by unit tests.
 
 ---
 
-*المشروع للتعلم والاستخدام الشخصي. الرجاء احترام حقوق النشر والمحتوى.*
+## The statistics
+
+The reference model for crash games is `P(X ≥ x) = 0.99 / x`, giving a ~1% house edge.
+
+**Computed over the selected window:**
+mean, median, geometric mean, standard deviation, percentiles (P5–P99), rate below
+2.00x and 1.20x, rate at/above 10x, current and longest sub-2.00x streaks, empirical
+house edge, 9-band histogram, rolling 20-round average.
+
+**Randomness diagnostics** — included specifically to *disprove* pattern-hunting:
+
+- **Lag-1 autocorrelation** on log-multipliers. Verified ≈ 0.001 on a fair 200,000-round
+  sample. Consecutive rounds are unrelated; there is no momentum to trade.
+- **Chi-square goodness-of-fit** against the theoretical distribution.
+- **Wilson score 95% confidence intervals** on every reach rate, so small samples
+  visibly show their uncertainty instead of masquerading as signal.
+
+### The risk indicator is a volatility read-out, not a betting signal
+
+🟢🟡🔴 scores how far the *recorded window* deviated from textbook randomness, using five
+factors: sub-2.00x rate, sub-1.20x rate, spread (P75/P25), current dry streak, and
+autocorrelation. A red light means "this sample was choppy", **never** "a big multiplier
+is due". The UI states this on the card itself.
+
+The scale is calibrated so a sample drawn from the textbook distribution reads **green** —
+verified by unit test.
+
+### Strategy simulator
+
+Replays Flat, Martingale, D'Alembert, Fibonacci, and %-bankroll plans over your history
+with configurable cash-out target, stop-loss, take-profit, and table limit.
+
+Because a single backtest is meaningless, every run is accompanied by a **300-iteration
+bootstrap** that resamples your own data and reports the median, 5th–95th percentile
+band, ruin rate, and worst drawdown. This is what makes the negative expected value
+visible: runs frequently finish slightly ahead, while rare catastrophic runs drag the
+mean below the starting bankroll every time.
+
+---
+
+## Testing
+
+`app/src/test/` contains 25 JUnit tests covering the analytical core, validated against
+a 200,000-round fair sample:
+
+```
+bust rate      0.5058   (theory 0.505)
+sub-1.20x      0.1753   (theory 0.175)
+median         1.970    (theory 1.980)
+autocorrelation 0.00106 (theory 0.000)
+chi-square      1.73 on df=5
+```
+
+Simulator invariants under test: exact bankroll arithmetic, `wins + losses == rounds`,
+bankroll never negative, stop-loss/take-profit boundaries honoured, all five strategies
+terminate cleanly, empty input never crashes, and the Monte-Carlo mean is always below
+the starting bankroll.
+
+**Two real bugs were caught by these tests during development:**
+
+1. Chi-square used `P(X ≥ 1.00) = 0.99` when it is exactly `1.0` — every round pays at
+   least 1.00x. This inflated the bottom bucket and scored fair samples at **chi = 69.6**
+   instead of **1.73**, i.e. the app would have told users a provably-fair game looked rigged.
+2. The dispersion factor used the coefficient of variation, which is meaningless on a
+   heavy-tailed Pareto distribution — a single 5000x round pushed CV to **34** against an
+   assumed baseline of 1.8, pinning every window at maximum risk. Replaced with the
+   outlier-robust quartile ratio P75/P25 (theoretical baseline 3.0).
+
+---
+
+## Privacy
+
+No internet permission is declared in the manifest. There is no account, no server, no
+analytics, and no casino integration. Round data lives in a local Room database and
+never leaves the device. The app cannot place bets.
+
+---
+
+## Responsible gambling
+
+Gambling carries real financial risk, and the expected long-run outcome for every player
+is a loss. If it is causing you harm:
+
+- [BeGambleAware](https://www.begambleaware.org)
+- [Gambling Therapy](https://www.gamblingtherapy.org) (global, multilingual)
+- [Gamblers Anonymous](https://www.gamblersanonymous.org)
+- [GamCare](https://www.gamcare.org.uk)
+
+Most operators also offer deposit limits, cool-off periods, and self-exclusion.
+18+ / 21+ depending on jurisdiction. Gambling may be restricted or illegal where you live.
+
+---
+
+## Licence & disclaimer
+
+Provided for educational and analytical purposes only. Not affiliated with, endorsed by,
+or connected to 1xBet, Roobet, Stake, or any gambling operator. The authors accept no
+responsibility for losses incurred through gambling.

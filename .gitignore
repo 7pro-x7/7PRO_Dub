@@ -1,15 +1,12 @@
 *.iml
 .gradle/
-.idea/
+.kotlin/
+/local.properties
+/.idea/
 .DS_Store
-build/
-app/build/
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
 local.properties
-captures/
-.cxx/
-*.apk
-*.aab
-*.keystore
-
-# أرتيفاكثان مثبتان (يُنزَّلان تلقائيًا بواسطة سكربت الجذر عند أول بناء)
-/local-maven/

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">دُبّل</string>
+    <string name="app_name">CrashLab</string>
+    <string name="tagline">Crash history analytics — not predictions</string>
+    <string name="disclaimer_short">This app analyses past rounds only. It cannot predict future results or guarantee profit.</string>
+    <string name="responsible_gambling">Gambling involves risk. Play responsibly, 18+.</string>
 </resources>
