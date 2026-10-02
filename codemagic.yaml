@@ -24,21 +24,41 @@ workflows:
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
 
+      - name: Fix gradlew permissions and verify
+        script: |
+          set -eux
+          echo "Current gradlew permissions:"
+          ls -la ./gradlew
+          echo "Setting executable permissions..."
+          chmod 755 ./gradlew
+          chmod +x ./gradlew
+          echo "Verifying permissions:"
+          ls -la ./gradlew
+          echo "Gradlew permissions fixed successfully"
+
       - name: Run unit tests
         script: |
-          bash ./gradlew test --stacktrace
+          set -eux
+          chmod 755 ./gradlew
+          ./gradlew test --stacktrace
 
       - name: Build debug APK
         script: |
-          bash ./gradlew assembleDebug --stacktrace
+          set -eux
+          chmod 755 ./gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Build release APK (unsigned)
         script: |
-          bash ./gradlew assembleRelease --stacktrace
+          set -eux
+          chmod 755 ./gradlew
+          ./gradlew assembleRelease --stacktrace
 
       - name: Build App Bundle
         script: |
-          bash ./gradlew bundleRelease --stacktrace
+          set -eux
+          chmod 755 ./gradlew
+          ./gradlew bundleRelease --stacktrace
 
     artifacts:
       - app/build/outputs/apk/**/*.apk
