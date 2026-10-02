@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>7PRO — الفصل الافتراضي</title>
+<!--
+  7PRO Virtual Classroom — browser client.
+
+  This exists because chat, the whiteboard and shared material are 7PRO's own
+  layer on Supabase, not Jitsi's. Opening the Jitsi room URL in a browser only
+  ever gave audio/video: anything the app synced through Supabase was invisible
+  there, which is exactly the "it doesn't sync between the app and the browser"
+  symptom. This page speaks to the same tables, the same RPCs and the same
+  Realtime channel the Android app uses, so a browser participant is a
+  first-class member of the room in both directions.
+
+  Serve it from any static host (or open it locally) — no build step.
+-->
+<style>
+:root {
+  --bg:#07111f; --surface:#0d1a2b; --surface-2:#122238; --surface-3:#172a43;
+  --line:rgba(255,255,255,.09); --text:#f7f9fc; --muted:#91a2b8;
+  --gold:#d9aa5b; --gold-2:#f0c879; --on-gold:#111827;
+  --green:#39c98a; --red:#ef6b73; --shadow:0 18px 55px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+body{margin:0;background:radial-gradient(circle at 15% 0%,#132744 0,#07111f 42%,#050b14 100%);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid transparent;border-radius:12px;padding:10px 14px;background:linear-gradient(180deg,var(--gold-2),var(--gold));color:var(--on-gold);font-weight:700;transition:.18s ease;box-shadow:0 5px 16px rgba(0,0,0,.16)}
+button:hover{transform:translateY(-1px);filter:brightness(1.05)}
+button.ghost{background:rgba(255,255,255,.045);color:var(--text);border-color:var(--line);box-shadow:none}
+button:disabled{opacity:.5;cursor:default;transform:none}
+input,select{font:inherit;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:#0a1727;color:var(--text);width:100%;outline:none}
+input:focus,select:focus{border-color:rgba(217,170,91,.7);box-shadow:0 0 0 3px rgba(217,170,91,.1)}
+.card{background:rgba(13,26,43,.88);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow);backdrop-filter:blur(14px)}
+.wrap{max-width:460px;margin:8vh auto;padding:16px;display:grid;gap:12px}
+.row{display:flex;gap:8px;align-items:center}.muted{color:var(--muted);font-size:13px}
+.pill{font-size:11px;font-weight:700;letter-spacing:.3px;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.055);color:var(--muted);border:1px solid var(--line)}
+.pill.live{background:rgba(57,201,138,.12);color:var(--green);border-color:rgba(57,201,138,.22)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;margin-inline-end:5px}.dot.on{background:var(--green);box-shadow:0 0 9px rgba(57,201,138,.65)}
+#app{display:none;height:100vh;grid-template-columns:minmax(0,1fr) 350px;gap:0}
+#stage{position:relative;display:grid;grid-template-rows:auto 1fr auto;min-width:0;min-height:0}
+#topbar{display:flex;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:rgba(10,22,37,.92);backdrop-filter:blur(14px);z-index:10}
+#title{font-size:15px;max-width:42vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#media{position:relative;overflow:hidden;background:#02060b;margin:14px;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);min-height:0}
+#jitsi,#shared{position:absolute;inset:0}#shared{display:none;background:#0a1320}
+#sharedImg{width:100%;height:100%;object-fit:contain;display:none}#sharedVideo{width:100%;height:100%;display:none}
+#board{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#toolbar{display:flex;gap:8px;padding:11px 14px 14px;background:rgba(10,22,37,.92);border-top:1px solid var(--line);flex-wrap:wrap;align-items:center}
+#toolbar button{font-size:13px}#toolbar input[type=color]{width:40px;height:40px;padding:3px;border-radius:10px}
+aside{border-inline-start:1px solid var(--line);background:rgba(9,20,34,.96);display:grid;grid-template-rows:auto 1fr auto;min-height:0;box-shadow:-12px 0 40px rgba(0,0,0,.16)}
+.tabs{display:flex;padding:8px;border-bottom:1px solid var(--line);gap:5px;background:rgba(255,255,255,.018)}
+.tabs button{flex:1;border-radius:10px;background:transparent;color:var(--muted);border:1px solid transparent;box-shadow:none;padding:9px}.tabs button.active{color:var(--text);background:rgba(217,170,91,.1);border-color:rgba(217,170,91,.2);box-shadow:none}
+#chatList,#peopleList{overflow-y:auto;padding:14px;display:grid;gap:10px;align-content:start}
+.msg{background:rgba(255,255,255,.045);border:1px solid var(--line);border-radius:14px;padding:9px 11px;line-height:1.45}.msg .who{font-size:11px;color:var(--gold-2);font-weight:700}.msg.q{border-color:rgba(217,170,91,.55);background:rgba(217,170,91,.08)}
+#composer{display:flex;gap:8px;padding:11px;border-top:1px solid var(--line);background:rgba(255,255,255,.018)}
+#composer button{white-space:nowrap} .banner{position:absolute;top:12px;inset-inline:12px;z-index:50;padding:10px 13px;border-radius:12px;background:rgba(239,107,115,.12);border:1px solid rgba(239,107,115,.3);color:#ff9aa0;display:none;backdrop-filter:blur(10px)}
+#sessionsCard{margin-top:2px}
+@media(max-width:860px){html,body{overflow:auto}#app{height:100dvh;grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) 42dvh}#media{margin:8px}#topbar{padding:10px 11px}#title{max-width:45vw}#toolbar{padding:8px;gap:6px}#toolbar .muted{display:none}aside{border-inline-start:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+
+<!-- ------------------------------------------------------------------ auth -->
+<div class="wrap" id="gate">
+  <div class="card" style="display:grid;gap:10px">
+    <h2 style="margin:0">7PRO — الفصل الافتراضي</h2>
+    <p class="muted" style="margin:0">يتم فتح الحصة مباشرة من رابط الدعوة.</p>
+    <input id="email" type="email" placeholder="البريد الإلكتروني" autocomplete="username" />
+    <input id="password" type="password" placeholder="كلمة المرور" autocomplete="current-password" />
+    <button id="signIn">دخول</button>
+    <div class="muted" id="gateError" style="color:var(--coral)"></div>
+  </div>
+
+  <div class="card" id="sessionsCard" style="display:none">
+    <h3 style="margin:0 0 8px">حصصي</h3>
+    <div id="sessions" style="display:grid;gap:8px"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="signOut">خروج</button>
+      <button class="ghost" id="reloadSessions">تحديث</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ room -->
+<div id="app">
+  <section id="stage">
+    <div id="topbar">
+      <strong id="title">—</strong>
+      <span class="pill live" id="status">LIVE</span>
+      <span class="pill" id="conn"><span class="dot" id="connDot"></span> الاتصال</span>
+      <span style="flex:1"></span>
+      <button class="ghost" id="leave">مغادرة</button>
+    </div>
+
+    <div id="media">
+      <div class="banner" id="banner"></div>
+      <div id="jitsi"></div>
+      <div id="shared">
+        <img id="sharedImg" alt="" />
+        <video id="sharedVideo" controls></video>
+        <canvas id="board"></canvas>
+      </div>
+    </div>
+
+    <div id="toolbar">
+      <button class="ghost" id="toggleShared">اللوح / المشاركة</button>
+      <button id="shareBtn">مشاركة ملف</button>
+      <input id="fileInput" type="file" accept="image/*,video/*,application/pdf" style="display:none" />
+      <button class="ghost" id="penBtn">قلم</button>
+      <input id="penColor" type="color" value="#e0a34f" style="width:44px;padding:2px" />
+      <button class="ghost" id="clearBtn">مسح</button>
+      <span class="muted" id="shareInfo"></span>
+    </div>
+  </section>
+
+  <aside>
+    <div class="tabs">
+      <button class="active" data-tab="chat">المحادثة</button>
+      <button data-tab="people">المشاركون</button>
+    </div>
+    <div id="chatList"></div>
+    <div id="peopleList" style="display:none"></div>
+    <div id="composer">
+      <input id="chatInput" placeholder="اكتب رسالة…" />
+      <button id="sendBtn">إرسال</button>
+    </div>
+  </aside>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Same project the Android app points at (BuildConfig.SUPABASE_URL / _ANON_KEY).
+const SUPABASE_URL = "https://usbfrqbjtpvnkmmcusdi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_z4-FFrrgruER4BwM10qV_A_C0dcN6CW";
+const SHARE_BUCKET = "course-media";
+const SHARE_FOLDER = "classroom-whiteboards";
+
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: { params: { eventsPerSecond: 20 } },
+});
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  me: null, accessToken: null, session: null, info: null, channel: null, jitsi: null,
+  strokes: [], board: null, chat: new Map(), heartbeat: null, reconcile: null,
+  leaveInProgress: false, closing: false, drawing: null,
+};
+
+function showError(msg) {
+  const b = $("banner");
+  b.textContent = msg;
+  b.style.display = msg ? "block" : "none";
+  if (msg) setTimeout(() => (b.style.display = "none"), 6000);
+}
+
+// ------------------------------------------------------------------ auth / guest invite
+// Invite links contain a short-lived-in-practice bearer key derived from the
+// server-generated classroom room password. Anonymous Supabase auth gives the
+// browser a real auth.uid so the existing RLS/realtime layer remains intact.
+async function openInviteDirectly() {
+  const params = new URLSearchParams(location.search);
+  const sessionId = params.get("session");
+  const accessKey = params.get("key");
+  if (!sessionId || !accessKey) return false;
+
+  $("gateError").textContent = "جارٍ فتح الحصة…";
+  // Reuse a session already stored in this browser instead of always minting a brand-new
+  // anonymous identity. Supabase persists the session in localStorage, so without this check,
+  // every reload/reconnect on the same device (a dropped connection, the phone backgrounding
+  // the browser tab, re-opening the same invite link) signed in as a *different* guest — which
+  // is exactly what made the same person show up "joined" several times in the participant
+  // list.
+  const existingSession = (await sb.auth.getSession())?.data?.session;
+  let userId = existingSession?.user?.id;
+  state.accessToken = existingSession?.access_token || null;
+  if (!userId) {
+    const { data: authData, error: authError } = await sb.auth.signInAnonymously();
+    if (authError || !authData?.user) {
+      $("gateError").textContent = "تعذر فتح الحصة مباشرة. يجب تفعيل Anonymous Sign-ins في Supabase.";
+      return true;
+    }
+    userId = authData.user.id;
+    state.accessToken = authData.session?.access_token || null;
+  }
+  state.me = userId;
+
+  const { data, error } = await sb.rpc("classroom_guest_join", {
+    p_session_id: sessionId,
+    p_access_key: accessKey,
+  });
+  if (error) {
+    $("gateError").textContent = error.message;
+    return true;
+  }
+
+  state.session = {
+    id: sessionId,
+    title: data?.title || "7PRO — الفصل الافتراضي",
+    status: data?.status || "LIVE",
+  };
+  state.info = data;
+  $("gate").style.display = "none";
+  $("app").style.display = "grid";
+  $("title").textContent = state.session.title;
+
+  await startJitsi();
+  await subscribeRealtime();
+  await Promise.all([loadChat(), loadBoard(), loadPresence()]);
+  startHeartbeat();
+  startReconcile();
+  return true;
+}
+
+$("signIn").onclick = async () => {
+  $("gateError").textContent = "";
+  const { error } = await sb.auth.signInWithPassword({
+    email: $("email").value.trim(), password: $("password").value,
+  });
+  if (error) { $("gateError").textContent = error.message; return; }
+  state.accessToken = (await sb.auth.getSession()).data.session?.access_token || null;
+  await afterAuth();
+};
+$("signOut").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+$("reloadSessions").onclick = () => loadSessions();
+
+async function afterAuth() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  state.me = user.id;
+  state.accessToken = (await sb.auth.getSession()).data.session?.access_token || state.accessToken;
+  $("sessionsCard").style.display = "block";
+  await loadSessions();
+
+  // The Android app sends teachers on old phones here with ?session=<id>: go straight into that
+  // class as soon as they are signed in, instead of making them find it in the list again.
+  const qs = new URLSearchParams(location.search);
+  const wanted = qs.get("session");
+  if (wanted && !qs.get("key") && !state.autoOpened) {
+    state.autoOpened = true;
+    const { data: s } = await sb
+      .from("classroom_sessions")
+      .select("id,title,status,scheduled_start,teacher_id")
+      .eq("id", wanted)
+      .maybeSingle();
+    if (s) await joinSession(s);
+  }
+}
+
+// Pre-fill the email the app passed along, so a teacher only has to type the password (or none at
+// all when the browser already remembers this account).
+{
+  const hint = new URLSearchParams(location.search).get("email");
+  if (hint) $("email").value = hint;
+}
+
+/**
+ * RLS is the filter here: classroom_sessions_select only returns sessions this
+ * account teaches, manages, or is an invited participant of — so the same query
+ * is correct for a teacher and for a student, exactly like in the app.
+ */
+async function loadSessions() {
+  const { data, error } = await sb
+    .from("classroom_sessions")
+    .select("id,title,status,scheduled_start,teacher_id")
+    .in("status", ["SCHEDULED", "LIVE"])
+    .order("scheduled_start", { ascending: false });
+  const host = $("sessions");
+  host.innerHTML = "";
+  if (error) { $("gateError").textContent = error.message; return; }
+  if (!data.length) { host.innerHTML = '<div class="muted">لا توجد حصص متاحة الآن.</div>'; return; }
+  data.forEach((s) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<span style="flex:1">${s.title}</span>
+      <span class="pill ${s.status === "LIVE" ? "live" : ""}">${s.status}</span>`;
+    const btn = document.createElement("button");
+    btn.textContent = "دخول";
+    btn.onclick = () => joinSession(s);
+    row.appendChild(btn);
+    host.appendChild(row);
+  });
+}
+
+// ------------------------------------------------------------------ join
+async function joinSession(session) {
+  const { data, error } = await sb.rpc("classroom_join", { p_session_id: session.id });
+  if (error) { $("gateError").textContent = error.message; return; }
+  state.session = session;
+  state.info = Array.isArray(data) ? data[0] : data;
+
+  $("gate").style.display = "none";
+  $("app").style.display = "grid";
+  $("title").textContent = session.title;
+
+  await startJitsi();
+  await subscribeRealtime();     // channel + every binding, THEN subscribe
+  await Promise.all([loadChat(), loadBoard(), loadPresence()]);
+  startHeartbeat();
+  startReconcile();
+}
+
+function normalizeJitsiDomain(raw) {
+  const domain = String(raw || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/$/, "")
+    .split("/")[0]
+    .toLowerCase();
+  // Older sessions may still contain the retired public host or a non-Jitsi riot.im host.
+  // Use the same fallback as Android so both sides enter the same room.
+  return !domain || domain === "meet.jit.si" || domain === "jitsi.riot.im"
+    ? "meet.ffmuc.net"
+    : domain;
+}
+
+// Some public Jitsi servers refuse to be shown inside another site's iframe (they send
+// X-Frame-Options / CSP frame-ancestors headers) — the browser then shows "<host> refused to
+// connect" in place of the call. meet.ffmuc.net (Freifunk München) does exactly this since
+// March 2026. The phone app is unaffected (it does not use an iframe); in the browser the call
+// has to open as its own page instead, and this page keeps chat, board and file sharing.
+const NO_EMBED_DOMAINS = ["meet.ffmuc.net"];
+
+function externalCallUrl(domain, jwt) {
+  const hash = [
+    "userInfo.displayName=" + encodeURIComponent(JSON.stringify(state.info.display_name || "")),
+    "config.prejoinConfig.enabled=false",
+    "config.prejoinPageEnabled=false",
+    "config.startWithVideoMuted=true",
+    "config.disableDeepLinking=true",
+    // Same P2P fix as below (see startJitsi's configOverwrite) — this is the fallback
+    // page opened as a separate tab for servers that refuse to be embedded, so it needs
+    // the same config independently.
+    "config.p2p.enabled=false",
+  ].join("&");
+  const query = jwt ? "?jwt=" + encodeURIComponent(jwt) : "";
+  return "https://" + domain + "/" + encodeURIComponent(state.info.room_name) + query + "#" + hash;
+}
+
+function showExternalCallPanel(domain, jwt) {
+  const host = $("jitsi");
+  host.textContent = "";
+  const box = document.createElement("div");
+  box.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:var(--text)";
+  const msg = document.createElement("div");
+  msg.style.cssText = "font-size:16px;line-height:1.7;max-width:420px";
+  msg.textContent = "الصوت والفيديو بيفتحوا في صفحة منفصلة. افتحها وسيب الصفحة دي مفتوحة للمحادثة والسبورة والملفات.";
+  const link = document.createElement("a");
+  link.href = externalCallUrl(domain, jwt);
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "افتح المكالمة (صوت وفيديو)";
+  link.style.cssText = "display:inline-block;padding:14px 26px;border-radius:14px;background:var(--gold-2,#d9aa5b);color:#1a1206;font-weight:700;text-decoration:none;font-size:16px";
+  box.append(msg, link);
+  host.appendChild(box);
+}
+
+// Short-lived JWT for servers that require one (Contabo/Hetzner set up with JWT from the owner's
+// "Meeting servers" screen). Best effort and bounded: an open server answers 501 and the call
+// simply opens without a token — exactly what the Android app does.
+async function fetchJitsiToken() {
+  try {
+    const token = (await sb.auth.getSession()).data.session?.access_token || state.accessToken;
+    if (!token || !state.session?.id) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/classroom-jitsi-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY },
+      body: JSON.stringify({ session_id: state.session.id }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body.token === "string" && body.token ? body.token : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function startJitsi() {
+  const jwt = await fetchJitsiToken();
+  return new Promise((resolve) => {
+    const domain = normalizeJitsiDomain(state.info.jitsi_domain);
+    if (NO_EMBED_DOMAINS.includes(domain)) {
+      showExternalCallPanel(domain, jwt);
+      resolve();
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = `https://${domain}/external_api.js`;
+    s.onload = () => {
+      state.jitsi = new window.JitsiMeetExternalAPI(domain, {
+        roomName: state.info.room_name,
+        parentNode: $("jitsi"),
+        ...(jwt ? { jwt } : {}),
+        userInfo: { displayName: state.info.display_name },
+        configOverwrite: {
+          prejoinPageEnabled: false,
+          // Camera off on arrival, exactly like the app: joining a lesson must never
+          // start broadcasting before the person has decided they're ready. One tap
+          // on the camera button turns it on.
+          startWithVideoMuted: true,
+          // 7PRO keeps one saved transcript of its own, so Jitsi's chat stays off
+          // in the browser exactly like it is in the app.
+          disableChat: true,
+          // Same fix as the Android app's applyAudioCleanupConfig (see
+          // ClassroomCallActivity.kt): P2P is Jitsi's default for a 2-person call, and a
+          // P2P connection carries only the stream state it was set up with. Turning the
+          // camera on/off after joining — exactly the toggle a teacher or student taps —
+          // changes that stream and forces a mid-call renegotiation from P2P to the
+          // bridge. When that renegotiation stalls or silently fails (common on mobile
+          // data / strict Wi-Fi), the other side keeps showing the old frame or nothing
+          // at all: camera state now permanently disagrees between the two sides for the
+          // rest of the call, exactly the "doesn't sync / doesn't show" symptom. The app
+          // was already fixed this way; the browser page never was, and a mixed app +
+          // browser (or browser + browser) call still hit it. Forcing every call through
+          // the bridge from the start means this renegotiation never has to happen.
+          p2p: { enabled: false },
+        },
+        interfaceConfigOverwrite: { TOOLBAR_BUTTONS: [
+          "microphone", "camera", "desktop", "tileview", "hangup", "fullscreen", "settings",
+        ] },
+      });
+      // The room is NOT password-locked any more: the Android app has no way to answer
+      // Jitsi's password prompt, so a teacher starting from the browser locked every app
+      // student out of the lesson. Access is controlled by classroom_join / the invite key.
+      // Answering a prompt (a room locked by an older page) is still harmless.
+      const pwd = state.info.room_password;
+      state.jitsi.on("passwordRequired", () => { if (pwd) state.jitsi.executeCommand("password", pwd); });
+      // Jitsi's own red hang-up button: without this the page stayed "in class" (heartbeat
+      // running, seat still JOINED) behind an empty Jitsi frame.
+      state.jitsi.on("readyToClose", () => leaveRoom());
+      resolve();
+    };
+    s.onerror = () => { showError("تعذّر تحميل Jitsi"); resolve(); };
+    document.body.appendChild(s);
+  });
+}
+
+// ------------------------------------------------------------------ realtime
+/**
+ * One channel, every binding registered before subscribe() — the same rule the
+ * Android client now follows. A binding added after the channel has joined is
+ * never sent to the server, which is what made sync look dead on both sides.
+ */
+async function subscribeRealtime() {
+  const id = state.session.id;
+  if (state.channel) {
+    await sb.removeChannel(state.channel);
+    state.channel = null;
+  }
+  const ch = sb.channel(`classroom-${id}`);
+
+  ch.on("postgres_changes",
+    { event: "INSERT", schema: "public", table: "classroom_chat_messages", filter: `session_id=eq.${id}` },
+    (p) => addMessages([p.new]));
+
+  ch.on("postgres_changes",
+    { event: "*", schema: "public", table: "classroom_whiteboard_boards", filter: `session_id=eq.${id}` },
+    (p) => applyBoard(p.new));
+
+  ch.on("postgres_changes",
+    { event: "INSERT", schema: "public", table: "classroom_whiteboard_strokes", filter: `session_id=eq.${id}` },
+    (p) => {
+      if (p.new.action === "CLEAR") { state.strokes = []; }
+      else if (!state.strokes.some((s) => s.id === p.new.id)) { state.strokes.push(p.new); }
+      drawBoard();
+    });
+
+  ch.on("postgres_changes",
+    { event: "*", schema: "public", table: "classroom_participants", filter: `session_id=eq.${id}` },
+    () => loadPresence());
+
+  ch.on("postgres_changes",
+    { event: "UPDATE", schema: "public", table: "classroom_sessions", filter: `id=eq.${id}` },
+    (p) => {
+      $("status").textContent = p.new.status;
+      if (p.new.status === "ENDED" || p.new.status === "CANCELED") {
+        showError("انتهت الحصة");
+        setTimeout(() => leaveRoom(), 1500);
+      }
+    });
+
+  // Broadcast — the instant delivery path, identical to the Android client's. Postgres
+  // Changes above remains the record; these are what make a message or a shared file appear
+  // without waiting on (or depending on) WAL replication reaching this subscriber.
+  ch.on("broadcast", { event: "chat" }, ({ payload }) => addMessages([payload]));
+  ch.on("broadcast", { event: "share" }, () => loadBoard());
+  ch.on("broadcast", { event: "stroke" }, () => loadBoard());
+  ch.on("broadcast", { event: "screen_share" }, ({ payload }) => {
+    if (payload.by === state.me) return;
+    // A presentation lives inside the Jitsi frame, so the shared-file overlay stands in front
+    // of it. It steps aside on its own and the toolbar button brings it back.
+    if (payload.on) $("shared").style.display = "none";
+    showError(payload.on ? "جارٍ مشاركة الشاشة الآن" : "");
+  });
+
+  ch.subscribe((status) => {
+    const live = status === "SUBSCRIBED";
+    $("connDot").className = "dot" + (live ? " on" : "");
+    $("conn").lastChild.textContent = live ? " متصل" : " إعادة الاتصال…";
+    // Anything that happened while the socket was down is refetched, not lost.
+    if (live && !state.closing) {
+      // Re-read every source after every reconnect, including an initially empty chat.
+      // Checking chat.size here skipped the first reconnect when the room had no messages.
+      loadChat(); loadBoard(); loadPresence();
+    }
+  });
+
+  state.channel = ch;
+}
+
+// ------------------------------------------------------------------ chat
+async function loadChat() {
+  const { data, error } = await sb
+    .from("classroom_chat_messages")
+    .select("*, profile:profiles!classroom_chat_messages_sender_id_fkey(id,full_name,avatar_url)")
+    .eq("session_id", state.session.id)
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (error) return showError(error.message);
+  addMessages(data);
+}
+
+function addMessages(rows) {
+  rows.forEach((r) => {
+    const existing = state.chat.get(r.id);
+    // Realtime payloads have no embedded profile — keep whichever copy has the name.
+    state.chat.set(r.id, existing?.profile && !r.profile ? { ...r, profile: existing.profile } : r);
+  });
+  const list = $("chatList");
+  list.innerHTML = "";
+  [...state.chat.values()].sort((a, b) => a.id - b.id).forEach((m) => {
+    const el = document.createElement("div");
+    el.className = "msg" + (m.is_question ? " q" : "");
+    const who = m.profile?.full_name || (m.sender_id === state.me ? "أنا" : "مشارك");
+    el.innerHTML = `<div class="who">${who}</div><div></div>`;
+    el.lastChild.textContent = m.body;
+    list.appendChild(el);
+  });
+  list.scrollTop = list.scrollHeight;
+}
+
+async function sendChat() {
+  const body = $("chatInput").value.trim();
+  if (!body) return;
+  $("chatInput").value = "";
+  const { data, error } = await sb.from("classroom_chat_messages")
+    .insert({ session_id: state.session.id, sender_id: state.me, body, is_question: false })
+    .select().single();
+  if (error) return showError(error.message);
+  addMessages([data]);          // instant echo, de-duplicated by id
+  state.channel?.send({ type: "broadcast", event: "chat", payload: data });
+}
+$("sendBtn").onclick = sendChat;
+$("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+
+// ------------------------------------------------------------------ presence
+async function loadPresence() {
+  const { data, error } = await sb.rpc("classroom_session_presence", { p_session_id: state.session.id });
+  if (error) return;
+  const host = $("peopleList");
+  host.innerHTML = "";
+  data.forEach((p) => {
+    const el = document.createElement("div");
+    el.className = "row";
+    el.innerHTML = `<span class="dot ${p.online ? "on" : ""}"></span>
+      <span style="flex:1">${p.full_name || "—"}</span>
+      <span class="pill">${p.role_in_session === "STUDENT" ? "طالب" : "معلم"}</span>
+      ${p.hand_raised ? '<span class="pill">✋</span>' : ""}`;
+    host.appendChild(el);
+  });
+}
+
+/**
+ * The same safety net the app runs: re-read the transcript and the shared board on a timer, so
+ * a wedged socket or a subscription that silently failed to bind cannot leave a message or a
+ * shared file invisible here indefinitely. Both reads are small and idempotent.
+ */
+function startReconcile() {
+  if (state.reconcile) clearInterval(state.reconcile);
+  state.reconcile = setInterval(() => {
+    if (!state.closing && state.session) { loadChat(); loadBoard(); loadPresence(); }
+  }, 10000);
+}
+
+/** Same 20s beat as the app: presence means "heard from recently", not "once tapped join". */
+function startHeartbeat() {
+  if (state.heartbeat) clearInterval(state.heartbeat);
+  const beat = async () => {
+    if (state.closing || !state.session) return;
+    const { error } = await sb.rpc("classroom_heartbeat", { p_session_id: state.session.id });
+    if (!error) loadPresence();
+  };
+  beat();
+  state.heartbeat = setInterval(beat, 20000);
+}
+
+// ------------------------------------------------------------------ shared material + board
+async function loadBoard() {
+  await sb.rpc("classroom_ensure_whiteboard", { p_session_id: state.session.id });
+  const { data: board } = await sb.from("classroom_whiteboard_boards")
+    .select("*").eq("session_id", state.session.id).single();
+  if (board) applyBoard(board);
+
+  const { data: strokes } = await sb.from("classroom_whiteboard_strokes")
+    .select("*").eq("session_id", state.session.id).order("id", { ascending: true });
+  const lastClear = [...(strokes || [])].reverse().find((s) => s.action === "CLEAR");
+  state.strokes = (strokes || []).filter((s) => s.action === "STROKE" && (!lastClear || s.id > lastClear.id));
+  drawBoard();
+}
+
+function applyBoard(board) {
+  if (!board) return;
+  state.board = board;
+  const img = $("sharedImg"), vid = $("sharedVideo");
+  img.style.display = vid.style.display = "none";
+  if (board.background_type === "IMAGE" && board.background_url) {
+    img.src = board.background_url; img.style.display = "block"; openShared();
+  } else if (board.background_type === "VIDEO" && board.background_url) {
+    vid.src = board.background_url; vid.style.display = "block"; openShared();
+  } else if (board.background_type === "PDF" && board.background_url) {
+    $("shareInfo").innerHTML = `<a href="${board.background_url}" target="_blank" style="color:var(--amber)">فتح الملف المشترك (PDF)</a>`;
+    openShared();
+  }
+  drawBoard();
+}
+
+function openShared() { $("shared").style.display = "block"; sizeBoard(); }
+$("toggleShared").onclick = () => {
+  const el = $("shared");
+  el.style.display = el.style.display === "block" ? "none" : "block";
+  sizeBoard();
+};
+
+// Every screen draws on the same fixed 9:16 board (centred, scaled to fit), exactly like the app:
+// points and pen width are stored relative to it, and the shared picture is laid out inside it,
+// so a line lands on the same spot at the same relative thickness on every device.
+const BOARD_ASPECT = 9 / 16;
+function boardRect(w, h) {
+  const bw = Math.min(w, h * BOARD_ASPECT), bh = bw / BOARD_ASPECT;
+  return { x: (w - bw) / 2, y: (h - bh) / 2, w: bw, h: bh };
+}
+
+function sizeBoard() {
+  const c = $("board");
+  c.width = c.clientWidth; c.height = c.clientHeight;
+  const R = boardRect(c.width, c.height), img = $("sharedImg");
+  if (img) Object.assign(img.style, { position: "absolute", left: R.x + "px", top: R.y + "px", width: R.w + "px", height: R.h + "px" });
+  drawBoard();
+}
+window.addEventListener("resize", sizeBoard);
+
+/**
+ * Strokes are stored in normalized 0..1 board space (`norm: true`), which is what
+ * makes a line drawn on a phone land in the same place in this browser. Legacy
+ * rows without the flag are replayed as raw pixels.
+ */
+function drawBoard() {
+  const c = $("board"), ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  const all = state.drawing ? [...state.strokes, { stroke: state.drawing }] : state.strokes;
+  all.forEach((row) => {
+    const s = row.stroke; if (!s?.points?.length) return;
+    const R = boardRect(c.width, c.height);
+    const pts = s.points.map(([x, y]) => s.bd ? [R.x + x * R.w, R.y + y * R.h] : s.norm ? [x * c.width, y * c.height] : [x, y]);
+    ctx.beginPath();
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.lineWidth = s.bd && s.wn ? s.wn * R.w : (s.width || 6);
+    ctx.globalCompositeOperation = s.eraser ? "destination-out" : "source-over";
+    ctx.strokeStyle = s.eraser ? "#000" : (s.color?.length === 9 ? "#" + s.color.slice(3) : (s.color || "#e0a34f"));
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.stroke();
+  });
+  ctx.globalCompositeOperation = "source-over";
+}
+
+// drawing -> insert (students and teachers alike; RLS allows STROKE for any participant)
+let penOn = false;
+$("penBtn").onclick = () => { penOn = !penOn; $("penBtn").style.background = penOn ? "var(--amber)" : ""; };
+const canvas = $("board");
+canvas.addEventListener("pointerdown", (e) => {
+  if (!penOn) return;
+  canvas.setPointerCapture(e.pointerId);
+  state.drawing = { color: $("penColor").value, width: 6, wn: 6 / boardRect(canvas.width, canvas.height).w, eraser: false, norm: true, bd: true, points: [] };
+  pushPoint(e);
+});
+canvas.addEventListener("pointermove", (e) => { if (state.drawing) { pushPoint(e); drawBoard(); } });
+canvas.addEventListener("pointerup", async () => {
+  const stroke = state.drawing; state.drawing = null;
+  if (!stroke || stroke.points.length < 2) return drawBoard();
+  const { error } = await sb.from("classroom_whiteboard_strokes").insert({
+    board_id: state.board.id, session_id: state.session.id, user_id: state.me,
+    action: "STROKE", stroke,
+  });
+  if (error) showError(error.message);
+});
+function pushPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  const R = boardRect(r.width, r.height);
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  state.drawing.points.push([clamp((e.clientX - r.left - R.x) / R.w), clamp((e.clientY - r.top - R.y) / R.h)]);
+}
+
+$("clearBtn").onclick = async () => {
+  const { error } = await sb.from("classroom_whiteboard_strokes").insert({
+    board_id: state.board.id, session_id: state.session.id, user_id: state.me,
+    action: "CLEAR", stroke: null,
+  });
+  if (error) showError(error.message);   // students get FORBIDDEN here, by design
+};
+
+// ------------------------------------------------------------------ share a file
+$("shareBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = async (e) => {
+  const file = e.target.files?.[0]; if (!file) return;
+  $("shareInfo").textContent = "جارٍ الرفع…";
+  // Same bucket and path shape the app uses, so a file shared from the browser
+  // opens in the app and vice versa.
+  const path = `${state.me}/${SHARE_FOLDER}/${Date.now()}-${file.name.replace(/[^\w.\-]+/g, "_")}`;
+  const { error: upErr } = await sb.storage.from(SHARE_BUCKET).upload(path, file);
+  if (upErr) { $("shareInfo").textContent = ""; return showError(upErr.message); }
+  const { data: pub } = sb.storage.from(SHARE_BUCKET).getPublicUrl(path);
+  const type = file.type.includes("pdf") ? "PDF" : file.type.startsWith("video") ? "VIDEO" : "IMAGE";
+  const { error } = await sb.rpc("classroom_set_whiteboard_background", {
+    p_session_id: state.session.id, p_url: pub.publicUrl, p_type: type, p_page: 0,
+  });
+  $("shareInfo").textContent = "";
+  if (error) return showError(error.message);
+  state.channel?.send({ type: "broadcast", event: "share", payload: { by: state.me, type } });
+};
+
+// ------------------------------------------------------------------ leave
+async function leaveRoom() {
+  if (state.leaveInProgress) return;
+  state.leaveInProgress = true;
+  state.closing = true;
+  clearInterval(state.heartbeat);
+  clearInterval(state.reconcile);
+  state.heartbeat = state.reconcile = null;
+  const sessionId = state.session?.id;
+  try { state.jitsi?.dispose(); } catch (_) {}
+  state.jitsi = null;
+  const channel = state.channel;
+  state.channel = null;
+  if (channel) await sb.removeChannel(channel);
+  if (sessionId) await sb.rpc("classroom_leave", { p_session_id: sessionId, p_intentional: true });
+  location.reload();
+}
+$("leave").onclick = leaveRoom;
+
+// A page lifecycle event is not proof that the user chose to end the call: mobile
+// browsers fire it while backgrounding, navigating, or reclaiming a WebView. Send
+// the automatic leave with keepalive and explicitly keep the session alive. Calling
+// sb.rpc() here without awaiting it was unreliable and left stale JOINED rows.
+function sendAutomaticLeave() {
+  if (state.closing || !state.session?.id) return;
+  state.closing = true;
+  clearInterval(state.heartbeat);
+  clearInterval(state.reconcile);
+  const accessToken = state.accessToken;
+  if (!accessToken) return;
+  fetch(`${SUPABASE_URL}/rest/v1/rpc/classroom_leave`, {
+    method: "POST",
+    keepalive: true,
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ p_session_id: state.session.id, p_intentional: false }),
+  }).catch(() => {});
+}
+window.addEventListener("pagehide", sendAutomaticLeave);
+window.addEventListener("beforeunload", sendAutomaticLeave);
+
+// tabs
+document.querySelectorAll(".tabs button").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    $("chatList").style.display = b.dataset.tab === "chat" ? "grid" : "none";
+    $("peopleList").style.display = b.dataset.tab === "people" ? "grid" : "none";
+  };
+});
+
+// Invite links open the classroom directly. A normal homepage visit keeps the
+// existing login fallback, and an already-authenticated browser can still resume.
+openInviteDirectly().then((handled) => {
+  if (handled) return;
+  sb.auth.getSession().then(({ data }) => { if (data.session) afterAuth(); });
+});
+</script>
+</body>
+</html>

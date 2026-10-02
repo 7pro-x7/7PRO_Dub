@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#15110e" />
+<title>7PRO — اختبار تحديد المستوى</title>
+<meta name="description" content="اكتشف مستواك بدقة — اختبار مجاني من 7PRO." />
+<!--
+  7PRO — اختبار تحديد المستوى على الويب، من غير تسجيل دخول.
+
+  إزاي بيشتغل من غير دخول:
+    الصفحة بتفتح "جلسة ضيف" تلقائيًا (Supabase anonymous sign-in، نفس اللي بيستخدمه الفصل الافتراضي).
+    الضيف بياخد ملف شخصي ACTIVE تلقائيًا، فنفس دوال التطبيق بتشتغل بالظبط بلا أي تعديل في القاعدة:
+      placement_tests (kind = PLACEMENT, status = PUBLISHED, بترتيب sort_order اللي حدده المالك)
+      start_test_attempt → next_test_question → submit_test_answer → finish_test_attempt → test_attempt_result
+    التصحيح وتحديد المستوى (CEFR) كله على السيرفر، الصفحة بس بتعرض.
+
+  القفل زي التطبيق: الاختبار اللي بعد كده بيتفتح بس لما الاختبار اللي قبله يتعدّى درجة نجاحه.
+  لو الشخص داخل بحساب 7PRO عادي في نفس المتصفح، نفس الجلسة بتُستخدم.
+
+  صفحة واحدة، من غير build.
+-->
+<style>
+:root{
+  --bg:#15110e; --bg2:#0e0f14; --card:#17171f; --card2:#1d1d27;
+  --line:rgba(255,255,255,.09); --text:#f6f3ee; --muted:#9d9aa1;
+  --amber:#e79a4a; --amber2:#f0ad63; --amber-soft:rgba(231,154,74,.14);
+  --blue:#3f8cf0; --green:#2fbf9b; --red:#ef6b73; --ok:#39c98a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{
+  background:radial-gradient(circle at 80% -10%,#3a2717 0,transparent 45%) ,linear-gradient(180deg,var(--bg) 0,var(--bg2) 55%,#0b0c10 100%) fixed;
+  color:var(--text);
+  font-family:"Segoe UI",Tahoma,system-ui,-apple-system,"Noto Sans Arabic",sans-serif;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.shell{max-width:560px;margin:0 auto;padding:16px 18px 44px}
+header{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+header h1{font-size:22px;margin:0;font-weight:800;flex:1}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.iconbtn[hidden]{display:none}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:28px;padding:18px 20px;margin-bottom:16px}
+.muted{color:var(--muted);line-height:1.8;font-size:15px}
+.hero{background:linear-gradient(180deg,#221a14 0,#15151b 60%);padding:22px 22px 20px}
+.tag{display:flex;align-items:center;gap:8px;color:var(--amber);font-size:14px;margin-bottom:10px}
+.hero h2{font-size:34px;line-height:1.25;margin:0 0 14px;font-weight:800}
+.bars{display:flex;align-items:flex-end;gap:10px;height:170px;margin:22px 0 8px;direction:ltr}
+.bars div{flex:1;text-align:center;font-size:15px;color:var(--muted);display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.bars i{display:block;border-radius:12px 12px 6px 6px;margin-bottom:8px}
+.bars .a i{background:linear-gradient(180deg,#e79a4a,#7a4f28)}
+.bars .b i{background:linear-gradient(180deg,#4a95f5,#1f4f92)}
+.bars .g i{background:linear-gradient(180deg,#2fbf9b,#1c6b58)}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:22px 4px 14px}
+.sec h3{margin:0;font-size:24px;font-weight:800}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:700;padding:8px 16px;border-radius:999px;background:var(--amber-soft);color:var(--amber)}
+.tcard{border-color:rgba(231,154,74,.42);position:relative}
+.tcard.locked{opacity:.55;border-color:var(--line)}
+.trow{display:flex;align-items:center;gap:14px}
+.tinfo{flex:1;min-width:0}
+.band{color:var(--amber);font-size:15px;font-weight:700}
+.tname{font-size:21px;font-weight:800;line-height:1.4;margin-top:2px}
+.med{width:74px;height:74px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:24px;font-weight:800;color:var(--amber);background:conic-gradient(var(--amber) var(--p,0%),rgba(231,154,74,.16) 0);position:relative}
+.med:before{content:"";position:absolute;inset:6px;border-radius:50%;background:#15151b}
+.med span{position:relative}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 16px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:14px;background:var(--amber-soft);color:var(--amber);font-size:15px;font-weight:700}
+.btn{width:100%;padding:16px;border:0;border-radius:18px;font:inherit;font-weight:800;font-size:18px;cursor:pointer;background:linear-gradient(180deg,var(--amber2),var(--amber));color:#1b1208}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--line);font-weight:700}
+.btn+.btn{margin-top:10px}
+.lockrow{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;background:rgba(255,255,255,.04);border-radius:14px;padding:11px 14px}
+.prog{height:10px;border-radius:99px;background:#26262f;overflow:hidden;margin:6px 0 10px}
+.prog b{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--amber),var(--amber2));transition:width .4s}
+.meta{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
+.timer{font-weight:800;color:var(--amber);direction:ltr}
+.timer.urgent{color:var(--red);animation:pl .7s infinite alternate}
+@keyframes pl{to{opacity:.45}}
+.qtag{display:inline-block;font-size:13px;font-weight:700;color:var(--amber);background:var(--amber-soft);border-radius:999px;padding:5px 12px;margin-bottom:12px}
+.qprompt{font-size:21px;font-weight:700;line-height:1.7;margin:0 0 14px;white-space:pre-wrap;unicode-bidi:plaintext}
+.qimg{max-width:100%;border-radius:16px;margin:0 0 14px;display:block}
+audio,video{width:100%;margin:0 0 14px;border-radius:12px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:inherit;font:inherit;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:18px;padding:15px 16px;margin-bottom:10px;cursor:pointer;font-size:18px;unicode-bidi:plaintext}
+.opt .k{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--muted);flex:none;display:grid;place-items:center;font-size:13px;color:var(--muted)}
+.opt.multi .k{border-radius:8px}
+.opt.sel{border-color:var(--amber);background:var(--amber-soft)}
+.opt.sel .k{background:var(--amber);border-color:var(--amber);color:#1b1208}
+.opt.right{border-color:var(--ok);background:rgba(57,201,138,.12)}
+.opt.wrong{border-color:var(--red);background:rgba(239,107,115,.12)}
+.opt:disabled{cursor:default}
+input,textarea{width:100%;font:inherit;font-size:18px;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:16px;padding:14px 16px;outline:none}
+input:focus,textarea:focus{border-color:rgba(231,154,74,.7)}
+input.ltr{direction:ltr;text-align:right}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+.fb{border-radius:16px;padding:12px 14px;margin:6px 0 14px;font-size:16px;line-height:1.7}
+.fb.ok{background:rgba(57,201,138,.1);border:1px solid rgba(57,201,138,.3);color:#7ee0b4}
+.fb.no{background:rgba(239,107,115,.1);border:1px solid rgba(239,107,115,.3);color:#ff9aa0}
+.err{background:rgba(239,107,115,.12);border:1px solid rgba(239,107,115,.35);color:#ff9aa0;padding:12px 14px;border-radius:14px;margin:12px 0;font-size:15px;line-height:1.7}
+.center{text-align:center;padding:26px 6px}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--amber);animation:sp .8s linear infinite;margin:70px auto 14px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.big{font-size:64px;font-weight:800;color:var(--amber);line-height:1;margin:6px 0}
+.lvl{display:inline-block;font-size:44px;font-weight:800;color:#1b1208;background:linear-gradient(180deg,var(--amber2),var(--amber));border-radius:22px;padding:8px 28px;margin:10px 0}
+.skill{margin:14px 0}
+.skill .h{display:flex;justify-content:space-between;font-size:15px;margin-bottom:6px}
+.stack{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.tagg{font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px}
+.tagg.s{background:rgba(47,191,155,.13);color:var(--green)}
+.tagg.w{background:rgba(239,107,115,.12);color:#ff9aa0}
+.foot{margin-top:24px;text-align:center;color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <button class="iconbtn" id="back" hidden aria-label="رجوع">→</button>
+    <h1 id="title">اختبار تحديد المستوى</h1>
+  </header>
+  <main id="view"><div class="spinner"></div></main>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// نفس مشروع Supabase اللي التطبيق بيشاور عليه (المفتاح ده publishable وآمن يبقى في الصفحة).
+const SUPABASE_URL = "https://usbfrqbjtpvnkmmcusdi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_z4-FFrrgruER4BwM10qV_A_C0dcN6CW";
+// صفحة حجز الجروبات: بتظهر كزرار بعد النتيجة. غيّره لو الرابط اتغيّر.
+const BOOKING_URL = "https://7pro-pay.7pro7777.workers.dev/";
+
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+});
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const digits = (s) => String(s ?? "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\D/g, "");
+const PHONE_RE = /^01[0125][0-9]{8}$/;
+const LEVELS = [
+  ["C2", "a", 100], ["C1", "a", 86], ["B2", "b", 72], ["B1", "b", 58], ["A2", "g", 44], ["A1", "g", 30],
+];
+const SKILLS = { GRAMMAR: "القواعد", VOCABULARY: "المفردات", READING: "القراءة", LISTENING: "الاستماع", WRITING: "الكتابة", SPEAKING: "المحادثة" };
+const skillName = (k) => SKILLS[String(k).toUpperCase()] || k;
+
+const ERR = {
+  TEST_NOT_AVAILABLE: "الاختبار ده مش متاح دلوقتي.",
+  TEST_HAS_NO_QUESTIONS: "الاختبار ده لسه مفيهوش أسئلة.",
+  TEST_LOCKED: "الاختبار ده مقفول دلوقتي.",
+  ATTEMPT_LIMIT_REACHED: "وصلت للحد الأقصى من المحاولات لهذا الاختبار.",
+  ACCOUNT_NOT_ACTIVE: "الحساب مش مفعّل. كلّم الإدارة.",
+  ATTEMPT_NOT_FOUND: "المحاولة دي مش موجودة. ابدأ الاختبار من جديد.",
+  ATTEMPT_CLOSED: "الاختبار خلص.",
+  UNAUTHORIZED: "تعذّر فتح الجلسة. جرّب تعمل تحديث للصفحة.",
+};
+function errText(e) {
+  const m = String((e && (e.message || e.error_description || e.error)) || e || "");
+  for (const k in ERR) if (m.includes(k)) return ERR[k];
+  if (/anonymous|signups? (are )?disabled/i.test(m)) return "الدخول كضيف مش متاح حاليًا. كلّم الإدارة.";
+  return "حصلت مشكلة، جرّب تاني.";
+}
+
+// ── الجلسة: ضيف تلقائي لو مفيش جلسة ───────────────────────────────────
+let user = null, profile = null;
+async function ensureSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { user = session.user; return; }
+  const { data, error } = await sb.auth.signInAnonymously();
+  if (error) throw error;
+  user = data.user;
+}
+async function loadProfile() {
+  profile = await sb.from("profiles").select("full_name,phone").eq("id", user.id).maybeSingle().then((x) => x.data, () => null);
+  if (!profile) {
+    await sb.rpc("ensure_my_profile").then(() => {}, () => {});
+    profile = await sb.from("profiles").select("full_name,phone").eq("id", user.id).maybeSingle().then((x) => x.data, () => null);
+  }
+}
+
+// ── التنقل ─────────────────────────────────────────────────────────────
+let backFn = null;
+function chrome(title, back) {
+  $("title").textContent = title;
+  backFn = back || null;
+  $("back").hidden = !backFn;
+}
+$("back").onclick = () => backFn && backFn();
+function mount(html) { $("view").innerHTML = html; window.scrollTo({ top: 0 }); }
+function loading(t = "") { mount(`<div class="spinner"></div>${t ? `<p class="muted" style="text-align:center">${esc(t)}</p>` : ""}`); }
+function fail(err, retry) {
+  mount(`<div class="card center"><div style="font-size:46px">⚠️</div><p class="muted">${esc(errText(err))}</p><button class="btn ghost" id="rt">حاول تاني</button></div>`);
+  $("rt").onclick = retry;
+}
+
+// ── الشاشة الرئيسية: الاختبارات المتاحة ────────────────────────────────
+async function viewHome() {
+  chrome("اختبار تحديد المستوى", null);
+  loading();
+  const t = await sb.from("placement_tests").select("*").eq("status", "PUBLISHED").eq("kind", "PLACEMENT").order("sort_order", { ascending: true });
+  if (t.error) return fail(t.error, viewHome);
+  const tests = t.data || [];
+  // أفضل نتيجة لكل اختبار، علشان القفل (نفس منطق التطبيق).
+  const best = {};
+  if (tests.length) {
+    const a = await sb.from("test_attempts").select("test_id,percent").eq("user_id", user.id).eq("status", "SUBMITTED").in("test_id", tests.map((x) => x.id));
+    for (const r of a.data || []) best[r.test_id] = Math.max(best[r.test_id] ?? 0, Number(r.percent) || 0);
+  }
+  let prevPassed = true;
+  const locks = tests.map((x) => { const locked = !prevPassed; prevPassed = (best[x.id] ?? 0) >= Number(x.passing_score); return locked; });
+
+  const bars = LEVELS.map(([n, c, h]) => `<div class="${c}"><i style="height:${h}%"></i>${n}</div>`).join("");
+  mount(`
+    <div class="card hero">
+      <div class="tag"><span>✦</span><span>تحديد المستوى</span></div>
+      <h2>اكتشف مستواك بدقة</h2>
+      <p class="muted" style="margin:0">تتكيف الأسئلة مع إجاباتك، لتصل إلى مستواك بدقة في خطوات أقل.</p>
+      <div class="bars">${bars}</div>
+      <div class="muted" style="font-size:15px">من المبتدئ إلى الطلاقة</div>
+    </div>
+    <div class="sec"><h3>الاختبارات المتاحة</h3><span class="pill">${tests.length} اختبار</span></div>
+    ${tests.length ? tests.map((x, i) => card(x, locks[i], best[x.id], tests[i - 1])).join("") : '<div class="card center"><div style="font-size:46px">📝</div><b>مفيش اختبارات متاحة دلوقتي</b><p class="muted">جرّب تاني بعد شوية.</p></div>'}`);
+  document.querySelectorAll("[data-start]").forEach((b) => (b.onclick = () => viewIntro(tests.find((x) => x.id === b.dataset.start))));
+  footer();
+}
+function card(t, locked, bestPct, prev) {
+  const has = bestPct != null, passed = has && bestPct >= Number(t.passing_score);
+  const band = t.target_level ? levelLabel(t.target_level) : (t.is_adaptive ? "تكيفي" : "ثابت");
+  const label = passed ? "أعد الاختبار" : has ? "حاول مرة تانية" : "ابدأ الاختبار المجاني";
+  const mins = Math.max(1, Math.round(Number(t.time_limit_seconds) / 60));
+  const med = (t.target_level || "7").slice(0, 2).toUpperCase();
+  const ring = has ? Math.min(100, Math.round(bestPct)) : 0;
+  return `<div class="card tcard ${locked ? "locked" : ""}">
+    <div class="trow">
+      <div class="tinfo"><div class="band">${esc(band)}</div><div class="tname">${esc(t.title_ar || t.title)}</div></div>
+      <div class="med" style="--p:${ring}%"><span>${esc(med)}</span></div>
+    </div>
+    ${t.description_ar || t.description ? `<p class="muted" style="margin:14px 0 0">${esc(t.description_ar || t.description)}</p>` : ""}
+    <div class="chips">
+      <span class="chip">🔒 ${t.is_adaptive ? "تكيفي" : "ثابت"}</span>
+      <span class="chip">؟ ${t.question_count} سؤال</span>
+      <span class="chip">⏱ ${mins} دقيقة</span>
+      ${has ? `<span class="chip">أفضل نتيجة ${Math.round(bestPct)}%</span>` : ""}
+    </div>
+    ${locked
+      ? `<div class="lockrow">🔒 يتفتح بعد ما تنجح في «${esc(prev?.title_ar || prev?.title || "الاختبار السابق")}» (${Math.round(Number(prev?.passing_score || 0))}% أو أكتر)</div>`
+      : `<button class="btn" data-start="${esc(t.id)}">${label} ←</button>`}
+  </div>`;
+}
+function levelLabel(l) { return String(l || "").toUpperCase(); }
+
+// ── قبل البداية: الاسم (علشان المالك يعرف صاحب النتيجة) ────────────────
+function viewIntro(t) {
+  chrome(t.title_ar || t.title, viewHome);
+  const mins = Math.max(1, Math.round(Number(t.time_limit_seconds) / 60));
+  const needName = !(profile && (profile.full_name || "").trim());
+  mount(`
+    <div class="card">
+      <div class="band">${t.is_adaptive ? "اختبار تكيفي" : "اختبار ثابت"}</div>
+      <div class="tname" style="margin-bottom:8px">${esc(t.title_ar || t.title)}</div>
+      <p class="muted" style="margin:0">${t.question_count} سؤال خلال ${mins} دقيقة. الوقت بيبدأ أول ما تضغط «ابدأ»، ومينفعش ترجع لسؤال فات.</p>
+      ${needName ? `
+        <label>اسمك</label><input id="nm" autocomplete="name" placeholder="الاسم بالكامل" />
+        <label>رقم الموبايل (اختياري)</label><input id="ph" class="ltr" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" />
+        <p class="muted" style="font-size:13px;margin:8px 0 0">بنستخدمهم علشان الإدارة تتواصل معاك بنتيجتك. مش محتاج تسجيل دخول.</p>` : ""}
+      <div id="msg"></div>
+      <button class="btn" id="go" style="margin-top:18px">ابدأ الاختبار ←</button>
+    </div>`);
+  if (needName) $("ph").oninput = () => { $("ph").value = digits($("ph").value).slice(0, 11); };
+  $("go").onclick = async () => {
+    const msg = (m) => ($("msg").innerHTML = `<div class="err">${esc(m)}</div>`);
+    if (needName) {
+      const name = $("nm").value.trim(), phone = digits($("ph").value);
+      if (!name) return msg("اكتب اسمك الأول.");
+      if (phone && !PHONE_RE.test(phone)) return msg("رقم الموبايل لازم يكون مصري صحيح (01xxxxxxxxx) أو سيبه فاضي.");
+      // نفس تحديث الملف الشخصي اللي بيعمله التطبيق على صف المستخدم نفسه.
+      const patch = { full_name: name }; if (phone) patch.phone = phone;
+      await sb.from("profiles").update(patch).eq("id", user.id).then(() => { profile = { ...(profile || {}), ...patch }; }, () => {});
+    }
+    $("go").disabled = true;
+    runTest(t);
+  };
+}
+
+// ── تشغيل الاختبار ─────────────────────────────────────────────────────
+let RUN = null;
+async function runTest(t) {
+  chrome(t.title_ar || t.title, null);
+  loading("جاري تجهيز الاختبار…");
+  const s = await sb.rpc("start_test_attempt", { p_test_id: t.id });
+  if (s.error) return fail(s.error, () => runTest(t));
+  RUN = { test: t, attemptId: s.data.attempt_id, deadline: Date.now() + (Number(s.data.seconds_left ?? s.data.time_limit_seconds) || 0) * 1000, tick: null };
+  nextQuestion();
+}
+async function nextQuestion() {
+  loading();
+  const r = await sb.rpc("next_test_question", { p_attempt_id: RUN.attemptId });
+  if (r.error) return fail(r.error, nextQuestion);
+  const d = r.data || {};
+  if (d.done) return finish(d.reason === "TIME_UP");
+  if (d.seconds_left != null) RUN.deadline = Date.now() + Number(d.seconds_left) * 1000;
+  drawQuestion(d);
+}
+function fmt(sec) { sec = Math.max(0, sec); return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; }
+function drawQuestion(d) {
+  const q = d.question, kind = q.kind;
+  let options = Array.isArray(q.options) ? q.options.map(String) : [];
+  if (!options.length && kind === "TRUE_FALSE") options = ["صح", "خطأ"];
+  const answerable = kind === "TEXT" || options.length > 0;
+  const multi = kind === "MULTI";
+  let picked = [];
+  let locked = false;
+
+  mount(`
+    <div class="card">
+      <div class="meta"><span>سؤال ${d.index} من ${d.total}</span><span class="timer" id="tm">--:--</span></div>
+      <div class="prog"><b style="width:${Math.max(0, ((d.index - 1) / Math.max(1, d.total)) * 100)}%"></b></div>
+    </div>
+    <div class="card">
+      <span class="qtag">${esc(skillName(q.skill))}${multi ? " • اختار أكتر من إجابة" : ""}</span>
+      ${q.image_url ? `<img class="qimg" src="${esc(q.image_url)}" alt="" />` : ""}
+      ${q.audio_url ? `<audio controls src="${esc(q.audio_url)}"></audio>` : ""}
+      ${q.video_url ? `<video controls playsinline src="${esc(q.video_url)}"></video>` : ""}
+      <p class="qprompt">${esc(q.prompt)}</p>
+      ${kind === "TEXT"
+        ? `<input id="tx" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="اكتب إجابتك" style="direction:ltr;text-align:left" />`
+        : options.map((o, i) => `<button class="opt ${multi ? "multi" : ""}" data-i="${i}"><span class="k">${multi ? "" : String.fromCharCode(65 + i)}</span><span>${esc(o)}</span></button>`).join("")}
+      <div id="fb"></div>
+      <button class="btn" id="act" ${answerable ? "disabled" : ""}>${answerable ? "تأكيد الإجابة" : "تخطي السؤال"}</button>
+    </div>`);
+
+  const act = $("act");
+  const sync = () => { act.disabled = kind === "TEXT" ? !$("tx").value.trim() : picked.length === 0; };
+  if (kind === "TEXT") $("tx").oninput = sync;
+  document.querySelectorAll(".opt").forEach((b) => (b.onclick = () => {
+    if (locked) return;
+    const i = Number(b.dataset.i);
+    if (multi) picked = picked.includes(i) ? picked.filter((x) => x !== i) : [...picked, i];
+    else picked = [i];
+    document.querySelectorAll(".opt").forEach((x) => x.classList.toggle("sel", picked.includes(Number(x.dataset.i))));
+    sync();
+  }));
+
+  clearInterval(RUN.tick);
+  const paint = () => {
+    const left = Math.round((RUN.deadline - Date.now()) / 1000);
+    const el = $("tm"); if (!el) return clearInterval(RUN.tick);
+    el.textContent = fmt(left); el.classList.toggle("urgent", left <= 30);
+    if (left <= 0) { clearInterval(RUN.tick); finish(true); }
+  };
+  paint(); RUN.tick = setInterval(paint, 1000);
+
+  act.onclick = async () => {
+    if (locked) { return nextQuestion(); }
+    act.disabled = true;
+    const isSkip = !answerable;
+    const res = await sb.rpc("submit_test_answer", {
+      p_attempt_id: RUN.attemptId, p_question_id: q.id,
+      p_selected: isSkip ? [] : kind === "TEXT" ? [] : [...picked].sort((a, b) => a - b),
+      p_text: kind === "TEXT" ? $("tx").value : null,
+      p_order: null, p_match: {},
+    });
+    if (res.error) {
+      act.disabled = false;
+      if (/ATTEMPT_CLOSED/.test(res.error.message)) return finish(true);
+      $("fb").innerHTML = `<div class="err">${esc(errText(res.error))}</div>`;
+      return;
+    }
+    if (isSkip) return nextQuestion();
+    const a = res.data || {};
+    locked = true;
+    if (kind === "TEXT") $("tx").disabled = true;
+    document.querySelectorAll(".opt").forEach((x) => { x.disabled = true; if (picked.includes(Number(x.dataset.i))) x.classList.add(a.correct ? "right" : "wrong"); });
+    if (a.graded === false) $("fb").innerHTML = `<div class="fb ok">اتسجّلت إجابتك.</div>`;
+    else $("fb").innerHTML = `<div class="fb ${a.correct ? "ok" : "no"}">${a.correct ? "إجابة صحيحة ✓" : "إجابة غلط"}${a.explanation ? `<div style="margin-top:6px;color:var(--text)">${esc(a.explanation)}</div>` : ""}</div>`;
+    act.disabled = false;
+    act.textContent = d.index >= d.total ? "شوف النتيجة" : "السؤال التالي ←";
+  };
+}
+
+// ── النتيجة ────────────────────────────────────────────────────────────
+async function finish(timedOut) {
+  clearInterval(RUN?.tick);
+  chrome("نتيجتك", null);
+  loading(timedOut ? "انتهى الوقت، بنحسب نتيجتك…" : "بنحسب نتيجتك…");
+  const r = await sb.rpc("finish_test_attempt", { p_attempt_id: RUN.attemptId });
+  if (r.error) return fail(r.error, () => finish(timedOut));
+  viewResult(r.data, RUN.test);
+}
+function viewResult(r, t) {
+  chrome("نتيجتك", viewHome);
+  if (r.status === "ABANDONED" || !r.answered) {
+    return mount(`<div class="card center"><div style="font-size:46px">🕘</div><h2 style="margin:0 0 8px">مفيش إجابات اتسجّلت</h2><p class="muted">ابدأ الاختبار تاني وجاوب على الأسئلة علشان نحدد مستواك.</p><button class="btn" id="home">رجوع للاختبارات</button></div>`) || ($("home").onclick = viewHome);
+  }
+  const skills = r.skills || {};
+  const sk = Object.keys(skills).map((k) => `<div class="skill"><div class="h"><span>${esc(skillName(k))}</span><b>${Math.round(skills[k])}%</b></div><div class="prog"><b style="width:${Math.round(skills[k])}%"></b></div></div>`).join("");
+  const tags = (arr, c) => (arr || []).map((k) => `<span class="tagg ${c}">${esc(skillName(k))}</span>`).join("");
+  mount(`
+    <div class="card center">
+      <div class="muted">مستواك</div>
+      <div class="lvl">${esc(r.level || "—")}</div>
+      <div class="big">${Math.round(r.percent)}%</div>
+      <div class="muted">${r.passed ? "عديت الاختبار ✓" : "لسه محتاج شوية تدريب"}</div>
+      ${r.better_than_percent != null ? `<div class="muted" style="margin-top:8px">أحسن من ${Math.round(r.better_than_percent)}% ممن خاضوا الاختبار</div>` : ""}
+    </div>
+    ${sk ? `<div class="card"><h3 style="margin:0 0 6px">مهاراتك</h3>${sk}
+      ${(r.strengths || []).length ? `<div class="muted" style="margin-top:12px">نقاط القوة</div><div class="stack">${tags(r.strengths, "s")}</div>` : ""}
+      ${(r.weaknesses || []).length ? `<div class="muted" style="margin-top:12px">محتاجة تركيز</div><div class="stack">${tags(r.weaknesses, "w")}</div>` : ""}</div>` : ""}
+    <div class="card">
+      <h3 style="margin:0 0 6px">الخطوة الجاية</h3>
+      <p class="muted" style="margin:0 0 14px">احجز جروب مناسب لمستواك مع أحد معلمي 7PRO.</p>
+      <a href="${esc(BOOKING_URL)}" style="text-decoration:none"><button class="btn">احجز جروب مناسب لمستواك ←</button></a>
+      <button class="btn ghost" id="home">رجوع للاختبارات</button>
+    </div>`);
+  $("home").onclick = viewHome;
+}
+
+function footer() { $("foot").innerHTML = "اختبار مجاني من 7PRO — من غير تسجيل دخول"; }
+
+// ── الإقلاع ────────────────────────────────────────────────────────────
+(async function boot() {
+  try {
+    await ensureSession();
+    await loadProfile();
+    viewHome();
+  } catch (e) {
+    fail(e, boot);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# 7PRO — صفحة الدورات العامة (من غير تسجيل دخول)
+# النشر:  cd web-courses && npx wrangler deploy
+# الرابط بعد النشر:  https://7pro-courses.<your-subdomain>.workers.dev/
+name = "7pro-courses"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+html_handling = "auto-trailing-slash"
+not_found_handling = "single-page-application"

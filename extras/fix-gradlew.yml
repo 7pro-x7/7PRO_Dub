@@ -1,0 +1,54 @@
+# Keeps gradlew (and the project's shell scripts) executable, automatically.
+#
+# Uploading files through the GitHub website (or unzipping on Windows) strips the executable
+# bit, which makes Rork's build fail with:  /bin/sh: 1: ./gradlew: Permission denied
+# This runs after every push, restores the bit in git itself, and commits the fix back to the
+# same branch. After the bot commit appears, simply re-run the Rork build.
+name: Fix gradlew permission
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-gradlew-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore executable bit in git
+        id: fix
+        run: |
+          changed=0
+          # gradlew files anywhere + every shell script tracked by git
+          files=$( (git ls-files '*gradlew' '*.sh') | sort -u )
+          for f in $files; do
+            [ -f "$f" ] || continue
+            mode=$(git ls-files -s -- "$f" | cut -c1-6)
+            if [ "$mode" != "100755" ]; then
+              echo "Fixing $f (was $mode)"
+              chmod +x "$f"
+              git update-index --chmod=+x -- "$f"
+              changed=1
+            fi
+          done
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the fix
+        if: steps.fix.outputs.changed == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Make gradlew executable (auto-fix)"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push origin "HEAD:${GITHUB_REF_NAME}"

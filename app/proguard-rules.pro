@@ -1,3 +1,0 @@
--keepattributes *Annotation*, Signature, Exception
--keep class com.crashlab.analyzer.data.** { *; }
--dontwarn kotlinx.coroutines.**

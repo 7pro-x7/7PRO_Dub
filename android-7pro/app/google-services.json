@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "89228993439",
+    "project_id": "pro-56ed0",
+    "storage_bucket": "pro-56ed0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:89228993439:android:5454edbce577a2904093aa",
+        "android_client_info": {
+          "package_name": "com.aca.sevenpro"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "89228993439-n0gjnie0d1n98fon2di9ovn6ui0sdllm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwP2bGkxI-9OJv-7SjS9Iy5TsvWOeEuH0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "89228993439-n0gjnie0d1n98fon2di9ovn6ui0sdllm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:89228993439:android:183151d41b866aa14093aa",
+        "android_client_info": {
+          "package_name": "com.aistudio.sevenpro.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "89228993439-n0gjnie0d1n98fon2di9ovn6ui0sdllm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwP2bGkxI-9OJv-7SjS9Iy5TsvWOeEuH0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "89228993439-n0gjnie0d1n98fon2di9ovn6ui0sdllm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

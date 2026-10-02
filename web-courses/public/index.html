@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#15110e" />
+<title>7PRO — الدورات</title>
+<meta name="description" content="دورات تعليمية في كل المجالات من 7PRO — تصفّح الدورات وشوف المحتوى والأسعار." />
+<meta property="og:title" content="دورات 7PRO" />
+<meta property="og:description" content="تصفّح دورات 7PRO التعليمية في كل المجالات وشوف المحتوى والأسعار." />
+<meta property="og:type" content="website" />
+<!--
+  7PRO — الدورات على الويب، من غير تسجيل دخول.
+
+  الرابط:
+    /                    → كل الدورات المنشورة
+    /?course=<course_id> → دورة معيّنة (المحتوى والسعر)
+  أي حد يقدر ينسخ الرابط من التطبيق (شاشة الدورات وشاشة الدورة) ويبعته.
+
+  بتقرا من دالتين عامتين في Supabase (web_courses / web_course): الدورات المنشورة فقط، وعناوين الدروس
+  بس — مفيش روابط فيديو ولا ملفات. السعر هو سعر الدفع للدولة الافتراضية من غير كوبونات.
+  التصفّح من غير تسجيل. الاشتراك من الصفحة: بيطلب دخول أو إنشاء حساب، وبعدها دفع بالتحويل على محفظة
+  (نفس مسار التطبيق، والإدارة بتراجع التحويل) أو تسجيل مجاني للدورات المجانية. الدفع بيمر على دالة checkout
+  اللي على السيرفر: السعر والكوبون بيتحسبوا هناك، مش في الصفحة.
+
+  الاشتراك الشهري: لو الكورس مدفوع وليه سعر شهري (monthly_price) الصفحة بتعرض اختيار «دفعة واحدة / اشتراك شهري».
+  كورس «اشتراك شهري فقط» (monthly_only): مفيش سعر دفعة واحدة؛ الصفحة بتعرض «X / شهر» والاشتراك الشهري بس.
+  الاشتراك الشهري بيفتح الكورس شهر وبعدين بيتقفل لحد ما الطالب يجدد. كورس كان مجاني واتحوّل لمدفوع بيتقفل على
+  اللي كانوا داخلين مجانًا ويظهر لهم إنه بقى مدفوع.
+
+  صفحة واحدة، من غير build.
+-->
+<style>
+:root{
+  --bg:#15110e; --bg2:#0e0f14; --card:#17171f; --line:rgba(255,255,255,.09);
+  --text:#f6f3ee; --muted:#9d9aa1; --amber:#e79a4a; --amber2:#f0ad63; --amber-soft:rgba(231,154,74,.14);
+  --teal:#2fbf9b; --teal-soft:rgba(47,191,155,.13);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{background:linear-gradient(180deg,var(--bg) 0,var(--bg2) 55%,#0b0c10 100%) fixed;color:var(--text);
+  font-family:"Segoe UI",Tahoma,system-ui,-apple-system,"Noto Sans Arabic",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.shell{max-width:620px;margin:0 auto;padding:16px 18px 48px}
+header{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+header h1{font-size:22px;margin:0;font-weight:800;flex:1;line-height:1.4}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.iconbtn[hidden]{display:none}
+.muted{color:var(--muted);line-height:1.8;font-size:15px}
+.search{width:100%;font:inherit;font-size:16px;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:16px;padding:13px 16px;outline:none;margin-bottom:14px}
+.search:focus{border-color:rgba(231,154,74,.7)}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:24px;overflow:hidden;margin-bottom:14px;display:block;width:100%;text-align:inherit;font:inherit;color:inherit;cursor:pointer;padding:0}
+.card:active{transform:scale(.99)}
+.cover{width:100%;aspect-ratio:16/9;object-fit:cover;background:#1d1d27;display:block}
+.cover.ph{display:grid;place-items:center;font-size:40px;color:var(--amber)}
+.body{padding:14px 16px 16px}
+.title{font-size:19px;font-weight:800;line-height:1.5;margin:0}
+.sub{color:var(--muted);font-size:14px;margin:4px 0 0;line-height:1.7}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:12px;background:var(--amber-soft);color:var(--amber);font-size:13px;font-weight:700}
+.chip.g{background:var(--teal-soft);color:var(--teal)}
+.chip.n{background:rgba(255,255,255,.06);color:var(--muted)}
+.price{margin-inline-start:auto;font-size:18px;font-weight:800;color:var(--amber);direction:ltr}
+.price.free{color:var(--teal)}
+.teacher{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:14px;color:var(--muted)}
+.av{width:30px;height:30px;border-radius:50%;object-fit:cover;background:#1d1d27;flex:none;display:grid;place-items:center;font-size:13px;font-weight:800;color:var(--amber)}
+.feat{position:absolute;top:10px;inset-inline-start:10px;background:var(--amber);color:#1b1208;font-size:12px;font-weight:800;padding:5px 10px;border-radius:999px}
+.wrap{position:relative}
+.box{background:var(--card);border:1.5px solid var(--line);border-radius:24px;padding:16px 18px;margin-bottom:14px}
+.btn{width:100%;padding:15px;border:0;border-radius:17px;font:inherit;font-weight:800;font-size:17px;cursor:pointer;background:linear-gradient(180deg,var(--amber2),var(--amber));color:#1b1208;text-align:center;text-decoration:none;display:block}
+.btn.ghost{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--line);font-weight:700}
+.btn[hidden]{display:none}
+.btn+.btn{margin-top:10px}
+.plans{display:flex;gap:10px;margin-bottom:12px}
+.plan{flex:1;font:inherit;color:var(--text);background:rgba(255,255,255,.04);border:1.5px solid var(--line);border-radius:16px;padding:11px 12px;cursor:pointer;text-align:center}
+.plan small{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
+.plan b{font-size:16px;direction:ltr;display:inline-block}
+.plan.on{border-color:var(--amber);background:var(--amber-soft)}
+.plan.on small{color:var(--amber)}
+.warn{background:var(--amber-soft);color:var(--amber2);border-radius:14px;padding:11px 14px;margin-bottom:12px;font-size:14px;line-height:1.7}
+h2.sec{font-size:19px;margin:22px 4px 10px;font-weight:800}
+.sechd{display:flex;justify-content:space-between;gap:10px;font-weight:800;font-size:16px;padding:6px 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.lesson{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);font-size:15px}
+.lesson:last-child{border-bottom:0}
+.lesson .ic{width:30px;height:30px;border-radius:10px;background:var(--amber-soft);color:var(--amber);display:grid;place-items:center;flex:none;font-size:13px}
+.lesson .t{flex:1;min-width:0;line-height:1.5}
+.lesson .d{color:var(--muted);font-size:13px;direction:ltr;flex:none}
+.lesson.play{cursor:pointer}.lesson.play .ic{background:var(--amber);color:#fff}
+.pl{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:12px}
+.pl-in{width:min(900px,100%);background:#0b0b0b;color:#fff;border-radius:14px;overflow:hidden;max-height:96vh;display:flex;flex-direction:column}
+.pl-hd{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:15px}.pl-hd b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-hd button{background:none;border:0;color:#fff;font-size:22px;cursor:pointer}
+.pl-stage{width:100%;background:#000;display:flex;justify-content:center;align-items:center;overflow:hidden}
+.pl-frame{position:relative;background:#000;width:100%;aspect-ratio:16/9}
+.pl-in.fs{position:fixed;inset:0;z-index:60;width:100%;max-height:none;height:100%;border-radius:0}
+.pl-in.fs .pl-stage{flex:1;min-height:0}
+.pl-in.fs #plbody{flex:1;min-height:0;display:flex;flex-direction:column}
+.pl-in.fs .pl-hd,.pl-in.fs .pl-bar{padding-top:max(10px,env(safe-area-inset-top));}
+.pl-in.fs.pv .pl-hd{position:absolute;top:0;left:0;right:0;z-index:5;background:linear-gradient(rgba(0,0,0,.65),transparent)}
+.pl-in.fs.pv .pl-bar{position:absolute;bottom:0;left:0;right:0;z-index:5;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.pl-in.fs.pv #plbody{position:static}
+.pl-in.fs .pl-bar{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+#plbody{display:block}
+.pl-frame iframe,.pl-frame video{position:absolute;inset:0;width:100%;height:100%;border:0}
+.pl-shield{position:absolute;inset:0;z-index:2;cursor:pointer}
+.pl-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;direction:ltr}.pl-bar input{flex:1}.pl-bar button{background:none;border:0;color:#fff;font-size:20px;cursor:pointer}.pl-bar span{font-size:12px;opacity:.8;min-width:84px;text-align:center}
+.pl-msg{padding:28px 18px;text-align:center;line-height:1.8}.pl-msg .btn{margin-top:12px}
+.desc{white-space:pre-wrap;line-height:1.9;font-size:16px}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--amber);animation:sp .8s linear infinite;margin:70px auto 14px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.err{background:rgba(239,107,115,.12);border:1px solid rgba(239,107,115,.35);color:#ff9aa0;padding:12px 14px;border-radius:14px;margin:12px 0;font-size:15px;line-height:1.7}
+.center{text-align:center;padding:26px 8px}
+.foot{margin-top:24px;text-align:center;color:var(--muted);font-size:12.5px}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+input.f,textarea.f{width:100%;font:inherit;font-size:16px;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:15px;padding:13px 15px;outline:none}
+input.f:focus{border-color:rgba(231,154,74,.7)}
+input.ltr{direction:ltr;text-align:right}
+.tabs{display:flex;gap:6px;background:#111118;border:1px solid var(--line);border-radius:14px;padding:4px;margin-bottom:6px}
+.tabs button{flex:1;border:0;border-radius:11px;padding:10px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;background:transparent;color:var(--muted)}
+.tabs button.on{background:var(--amber-soft);color:var(--amber)}
+.sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:14px 0 0}
+.sep:before,.sep:after{content:"";flex:1;height:1px;background:var(--line)}
+.btn.google{background:#fff;color:#222;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn.google svg{width:20px;height:20px;flex:none}
+.btn:disabled{opacity:.5;cursor:default}
+.linkbtn{background:none;border:0;color:var(--amber);font:inherit;font-size:13px;cursor:pointer;padding:6px 0;text-decoration:underline}
+.ok2{background:rgba(57,201,138,.1);border:1px solid rgba(57,201,138,.3);color:#7ee0b4;padding:12px 14px;border-radius:14px;margin:12px 0;font-size:15px;line-height:1.7}
+.note{background:var(--teal-soft);color:#7fdcc4;border-radius:14px;padding:11px 14px;font-size:14px;line-height:1.7;margin:0 0 12px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:15px}
+.kv:last-child{border-bottom:0}
+.wallets{display:grid;gap:10px;margin-bottom:6px}
+.wallet{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font:inherit;color:inherit;text-align:inherit;width:100%}
+.wallet.sel{border-color:var(--amber);background:var(--amber-soft)}
+.wallet .wi{width:38px;height:38px;border-radius:12px;background:var(--amber-soft);color:var(--amber);display:grid;place-items:center;font-weight:800;flex:none}
+.numbox{display:flex;align-items:center;gap:10px;background:#111118;border:1.5px dashed rgba(231,154,74,.5);border-radius:16px;padding:12px 14px;margin:8px 0}
+.numbox .num{flex:1;font-size:21px;font-weight:800;letter-spacing:1px;direction:ltr;text-align:right}
+.numbox button{border:0;background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.file{display:block;border:1.5px dashed var(--line);border-radius:16px;padding:16px;text-align:center;cursor:pointer;color:var(--muted);font-size:14px}
+.file.has{border-style:solid;border-color:rgba(57,201,138,.5);color:#7ee0b4}
+.file input{display:none}
+.coupon{display:flex;gap:8px}
+.coupon button{flex:none;width:auto;padding:0 18px;margin:0}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));inset-inline:0;margin:0 auto;width:max-content;max-width:90%;background:#26262f;border:1px solid var(--line);color:var(--text);padding:11px 18px;border-radius:14px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <button class="iconbtn" id="back" hidden aria-label="رجوع">→</button>
+    <h1 id="title">الدورات</h1>
+    <button class="iconbtn" id="share" hidden aria-label="مشاركة الرابط">🔗</button>
+  </header>
+  <main id="view"><div class="spinner"></div></main>
+  <div class="foot" id="foot">7PRO</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// نفس مشروع Supabase اللي التطبيق بيشاور عليه (المفتاح ده publishable وآمن يبقى في الصفحة).
+const SUPABASE_URL = "https://usbfrqbjtpvnkmmcusdi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_z4-FFrrgruER4BwM10qV_A_C0dcN6CW";
+// رابط تحميل التطبيق (Google Play مثلًا). فاضي = الزرار مش بيظهر.
+const APP_URL = "";
+
+// التصفّح عام. الجلسة بتتحفظ بس لما الشخص يسجّل دخول علشان يشترك.
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+const PROOF_BUCKET = "payment-proofs";
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+const PHONE_RE = /^01[0125][0-9]{8}$/;
+const digits = (s) => String(s ?? "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\D/g, "");
+const BRANDS = { VODAFONE: "فودافون كاش", ORANGE: "أورنج كاش", ETISALAT: "اتصالات كاش", WE: "وي باي" };
+const brandName = (b) => BRANDS[String(b || "").toUpperCase()] || b;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const ar = (o, k) => o[k + "_ar"] || o[k] || o[k + "_en"] || "";
+const safeImg = (u) => { try { const x = new URL(u); return x.protocol === "https:" ? x.href : null; } catch { return null; } };
+const money = (n, c) => `${Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${c || ""}`.trim();
+const dur = (s) => { s = Number(s) || 0; if (!s) return ""; const m = Math.round(s / 60); return m >= 60 ? `${Math.floor(m / 60)}س ${m % 60}د` : `${Math.max(1, m)}د`; };
+const KIND = { VIDEO: "▶", DOCUMENT: "📄", TEXT: "📝", QUIZ: "؟", LIVE: "●" };
+const LEVEL = (l) => (l ? String(l).toUpperCase() : "");
+
+const params = new URLSearchParams(location.search);
+const courseId = params.get("course");
+
+function chrome(title, back, share) {
+  $("title").textContent = title;
+  $("back").hidden = !back;
+  $("share").hidden = !share;
+  $("back").onclick = back || null;
+}
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); setTimeout(() => el.classList.remove("on"), 2200); }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  toast("تم نسخ الرابط");
+}
+async function shareLink(url, title) {
+  if (navigator.share) { try { await navigator.share({ title, url }); return; } catch { /* اتلغت */ } }
+  copy(url);
+}
+const mount = (html) => { $("view").innerHTML = html; window.scrollTo({ top: 0 }); };
+const loading = () => { $("view").innerHTML = '<div class="spinner"></div>'; };
+function fail(retry, notFound) {
+  mount(`<div class="box center"><div style="font-size:46px">${notFound ? "🔍" : "⚠️"}</div>
+    <p class="muted">${notFound ? "الدورة دي مش متاحة (ممكن تكون اتشالت أو لسه ما اتنشرتش)." : "حصلت مشكلة في تحميل البيانات."}</p>
+    <button class="btn ghost" id="rt">${notFound ? "شوف كل الدورات" : "حاول تاني"}</button></div>`);
+  $("rt").onclick = notFound ? () => go("") : retry;
+}
+function go(id) {
+  const u = new URL(location.href); u.search = id ? `?course=${id}` : "";
+  history.pushState({}, "", u); route();
+}
+window.addEventListener("popstate", route);
+
+// ── الكتالوج ───────────────────────────────────────────────────────────
+let CATALOG = null;
+async function viewCatalog() {
+  chrome("الدورات", null, true);
+  $("share").onclick = () => shareLink(location.origin + location.pathname, "دورات 7PRO");
+  document.title = "7PRO — الدورات";
+  if (!CATALOG) {
+    loading();
+    const r = await sb.rpc("web_courses");
+    if (r.error) return fail(viewCatalog);
+    CATALOG = r.data || [];
+  }
+  const draw = (q = "") => {
+    const list = CATALOG.filter((c) => !q || (ar(c, "title") + " " + ar(c, "subtitle") + " " + (c.teacher_name || "")).toLowerCase().includes(q.toLowerCase()));
+    $("list").innerHTML = list.length ? list.map(card).join("") : '<div class="box center muted">مفيش دورات مطابقة.</div>';
+    document.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => go(b.dataset.c)));
+  };
+  mount(`<input class="search" id="q" placeholder="ابحث عن دورة أو معلم" /><div id="list"></div>`);
+  if (!CATALOG.length) $("list").innerHTML = '<div class="box center"><div style="font-size:46px">📚</div><b>مفيش دورات منشورة دلوقتي</b></div>';
+  else draw();
+  $("q").oninput = (e) => draw(e.target.value.trim());
+}
+function card(c) {
+  const img = safeImg(c.thumbnail_url);
+  const av = c.teacher_avatar && safeImg(c.teacher_avatar) ? `<img class="av" src="${esc(safeImg(c.teacher_avatar))}" alt="" referrerpolicy="no-referrer" />` : `<span class="av">${esc((c.teacher_name || "؟").slice(0, 1))}</span>`;
+  return `<button class="card" data-c="${esc(c.id)}"><div class="wrap">
+    ${img ? `<img class="cover" src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<div class="cover ph">📚</div>'}
+    ${c.is_featured ? '<span class="feat">مميزة</span>' : ""}</div>
+    <div class="body"><p class="title">${esc(ar(c, "title"))}</p>
+      ${ar(c, "subtitle") ? `<p class="sub">${esc(ar(c, "subtitle"))}</p>` : ""}
+      <div class="row">
+        ${c.level ? `<span class="chip">${esc(LEVEL(c.level))}</span>` : ""}
+        <span class="chip n">${c.lessons_count} درس</span>
+        ${!c.is_free && !c.monthly_only && Number(c.monthly_price) > 0 ? `<span class="chip g">أو ${esc(money(c.monthly_price, c.currency))} / شهر</span>` : ""}
+        ${c.monthly_only ? '<span class="chip g">اشتراك شهري</span>' : ""}
+        ${Number(c.rating_count) > 0 ? `<span class="chip n">★ ${Number(c.rating_avg).toFixed(1)}</span>` : ""}
+        <span class="price ${c.is_free ? "free" : ""}">${c.is_free ? "مجانية" : esc(money(c.monthly_only ? c.monthly_price : c.price, c.currency)) + (c.monthly_only ? " / شهر" : "")}</span>
+      </div>
+      ${c.teacher_name ? `<div class="teacher">${av}<span>${esc(c.teacher_name)}</span></div>` : ""}
+    </div></button>`;
+}
+
+// ── تفاصيل دورة ────────────────────────────────────────────────────────
+async function viewCourse(id, opts = {}) {
+  chrome("الدورة", () => go(""), true);
+  loading();
+  const r = await sb.rpc("web_course", { p_id: id });
+  if (r.error) return fail(() => viewCourse(id), /COURSE_NOT_FOUND/.test(r.error.message));
+  const c = r.data, url = location.origin + location.pathname + "?course=" + c.id;
+  const title = ar(c, "title");
+  document.title = "7PRO — " + title;
+  chrome("الدورة", () => go(""), true);
+  $("share").onclick = () => shareLink(url, title);
+  const img = safeImg(c.thumbnail_url);
+  const groups = [...(c.sections || []).map((s) => ({ title: ar(s, "title"), lessons: s.lessons || [] })), ...((c.loose_lessons || []).length ? [{ title: (c.sections || []).length ? "دروس إضافية" : "محتوى الدورة", lessons: c.loose_lessons }] : [])].filter((g) => g.lessons.length);
+  const total = groups.reduce((n, g) => n + g.lessons.length, 0);
+  const previews = groups.reduce((n, g) => n + g.lessons.filter((l) => l.is_preview).length, 0);
+  mount(`
+    <div class="box" style="padding:0;overflow:hidden">
+      ${img ? `<img class="cover" src="${esc(img)}" alt="" referrerpolicy="no-referrer" />` : '<div class="cover ph">📚</div>'}
+      <div class="body">
+        <p class="title" style="font-size:22px">${esc(title)}</p>
+        ${ar(c, "subtitle") ? `<p class="sub">${esc(ar(c, "subtitle"))}</p>` : ""}
+        <div class="row">
+          ${c.level ? `<span class="chip">${esc(LEVEL(c.level))}</span>` : ""}
+          <span class="chip n">${total} درس</span>
+          ${Number(c.rating_count) > 0 ? `<span class="chip n">★ ${Number(c.rating_avg).toFixed(1)} (${c.rating_count})</span>` : ""}
+          ${Number(c.enrollments_count) > 0 ? `<span class="chip n">${c.enrollments_count} طالب</span>` : ""}
+          ${c.certificate_enabled ? '<span class="chip g">شهادة إتمام</span>' : ""}
+        </div>
+        ${c.teacher_name ? `<div class="teacher">${c.teacher_avatar && safeImg(c.teacher_avatar) ? `<img class="av" src="${esc(safeImg(c.teacher_avatar))}" alt="" referrerpolicy="no-referrer" />` : `<span class="av">${esc(c.teacher_name.slice(0, 1))}</span>`}<span>${esc(c.teacher_name)}</span></div>` : ""}
+        <div class="row" style="margin-top:16px"><span class="price ${c.is_free ? "free" : ""}" style="margin:0;font-size:24px">${c.is_free ? "مجانية" : esc(money(c.monthly_only ? c.monthly_price : c.price, c.currency)) + (c.monthly_only ? " / شهر" : "")}</span>${!c.is_free && !c.monthly_only && Number(c.monthly_price) > 0 ? `<span class="chip g">أو ${esc(money(c.monthly_price, c.currency))} / شهر</span>` : ""}</div>
+      </div>
+    </div>
+    <div class="box" id="buybox">
+      <div id="lapsed"></div>
+      <div id="plans"></div>
+      <button class="btn" id="buy">${c.is_free ? "ابدأ الدورة مجانًا" : "اشترك في الدورة"}</button>
+      <button class="btn ghost" id="renew" hidden></button>
+      ${APP_URL ? `<a class="btn ghost" href="${esc(APP_URL)}" target="_blank" rel="noopener">حمّل تطبيق 7PRO</a>` : ""}
+      <button class="btn ghost" id="cp">نسخ رابط الدورة</button>
+    </div>
+    ${ar(c, "description") ? `<h2 class="sec">عن الدورة</h2><div class="box desc">${esc(ar(c, "description"))}</div>` : ""}
+    ${groups.length ? `<h2 class="sec">محتوى الدورة${previews ? ` <span class="muted" style="font-size:13px;font-weight:400">— ${previews} معاينة مجانية</span>` : ""}</h2>
+      <div class="box">${groups.map((g) => `${groups.length > 1 || g.title ? `<div class="sechd"><span>${esc(g.title)}</span><span class="muted" style="font-weight:400;font-size:13px">${g.lessons.length} درس</span></div>` : ""}${g.lessons.map((l) => `<div class="lesson${String(l.kind).toUpperCase() === "VIDEO" && l.id ? " play" : ""}"${String(l.kind).toUpperCase() === "VIDEO" && l.id ? ` data-l="${esc(l.id)}"` : ""}><span class="ic">${KIND[String(l.kind).toUpperCase()] || "•"}</span><span class="t">${esc(ar(l, "title"))}${l.is_preview ? ' <span class="chip g" style="padding:2px 8px;font-size:11px">معاينة</span>' : ""}</span><span class="d">${esc(dur(l.duration_seconds))}</span></div>`).join("")}`).join("")}</div>` : ""}
+  `);
+  document.querySelectorAll("[data-l]").forEach((el) => (el.onclick = () => openLesson(el.dataset.l, c)));
+  $("cp").onclick = () => copy(url);
+  const hasMonthly = !c.is_free && Number(c.monthly_price) > 0;
+  PLAN = c.monthly_only && hasMonthly ? "MONTH" : "ONCE"; COUPON = "";
+  const buyLabel = () => (c.is_free ? "ابدأ الدورة مجانًا" : PLAN === "MONTH" ? `اشترك شهريًا بـ ${money(c.monthly_price, c.currency)}` : "اشترك في الدورة");
+  const drawPlans = () => {
+    if (!hasMonthly || c.monthly_only) return; // الاشتراك الشهري فقط: مفيش اختيار
+    $("plans").innerHTML = `<div class="plans">
+      <button class="plan ${PLAN === "ONCE" ? "on" : ""}" data-p="ONCE"><small>دفعة واحدة</small><b>${esc(money(c.price, c.currency))}</b></button>
+      <button class="plan ${PLAN === "MONTH" ? "on" : ""}" data-p="MONTH"><small>اشتراك شهري</small><b>${esc(money(c.monthly_price, c.currency))} / شهر</b></button></div>`;
+    document.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => { PLAN = b.dataset.p; COUPON = ""; drawPlans(); $("buy").textContent = buyLabel(); }));
+  };
+  drawPlans();
+  $("buy").textContent = buyLabel();
+  $("buy").onclick = () => startPurchase(c);
+  // مشترك بالفعل؟ الزرار يفتح الدروس على طول
+  const me = await currentUser();
+  const en = me ? await getEnrollment(me.id, c.id) : null;
+  if (en && enrollmentActive(en)) {
+    $("plans").innerHTML = "";
+    $("buy").textContent = "▶ تابع الدورة";
+    $("buy").onclick = () => openCourseLessons(c);
+    if (en.access_type === "MONTHLY" && en.expires_at) {
+      $("lapsed").innerHTML = `<div class="ok2">اشتراكك الشهري ساري حتى ${esc(dateAr(en.expires_at))}</div>`;
+      if (hasMonthly) {
+        $("renew").hidden = false;
+        $("renew").textContent = `جدّد الاشتراك بـ ${money(c.monthly_price, c.currency)} / شهر`;
+        $("renew").onclick = () => { PLAN = "MONTH"; COUPON = ""; startPurchase(c, true); };
+      }
+    }
+  } else if (en && !c.is_free) {
+    // كان داخل الدورة وبقت مقفولة: يا إما اتحوّلت لمدفوعة، يا إما اشتراكه الشهري خلص
+    $("lapsed").innerHTML = `<div class="warn">${en.status === "PAYMENT_REQUIRED" ? (c.monthly_only ? "الدورة دي بقت بالاشتراك الشهري فقط. اشترك عشان تكمل التعلّم." : "الدورة دي بقت مدفوعة. اشترك عشان تكمل التعلّم.") : "اشتراكك الشهري خلص. جدّد عشان تكمل التعلّم."}</div>`;
+  }
+  if (opts.open) openCourseLessons(c, true);
+}
+
+// ── تشغيل فيديو الدرس ──────────────────────────────────────────────────
+let ytReady;
+const loadYT = () => (ytReady ||= new Promise((res) => {
+  if (window.YT && YT.Player) return res();
+  window.onYouTubeIframeAPIReady = res;
+  const s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(s);
+}));
+/** بيكتشف لو صورة الفيديو طولية: الصورة المصغّرة بيبقى ليها أعمدة سودا على الجنبين. */
+function thumbIsVertical(id) {
+  return new Promise((res) => {
+    const im = new Image(); im.crossOrigin = "anonymous";
+    im.onload = () => {
+      try {
+        const W = 96, H = 72, c = document.createElement("canvas"); c.width = W; c.height = H;
+        const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(im, 0, 0, W, H);
+        const lum = (x0, x1) => { const d = x.getImageData(x0, 0, x1 - x0, H).data; let mx = 0, sum = 0, n = 0; for (let i = 0; i < d.length; i += 4) { const l = (d[i] + d[i + 1] + d[i + 2]) / 3; if (l > mx) mx = l; sum += l; n++; } return { mx, avg: sum / n }; };
+        const L = lum(0, Math.floor(W * 0.18)), R = lum(Math.ceil(W * 0.82), W), M = lum(Math.floor(W * 0.4), Math.ceil(W * 0.6));
+        res(L.mx < 20 && R.mx < 20 && M.avg > 25);
+      } catch { res(false); }
+    };
+    im.onerror = () => res(false);
+    im.src = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+  });
+}
+/** بيعرف لو فيديو يوتيوب طولي. بيرجّع 9/16 أو 16/9 لو متأكد، أو null لو مش عارف. */
+async function ytRatio(u, id) {
+  try { const v = localStorage.getItem("plr:" + id); if (v) return v === "p" ? 9 / 16 : 16 / 9; } catch {}
+  if (u.pathname.startsWith("/shorts/") || u.hash === "#vertical" || u.searchParams.get("vertical")) return 9 / 16;
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3000);
+  const oe = fetch("https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + id), { signal: ctl.signal })
+    .then((r) => r.json()).then((j) => !!(j.width && j.height && j.width < j.height)).catch(() => false);
+  const th = thumbIsVertical(id);
+  const [a, b] = await Promise.all([oe, Promise.race([th, new Promise((r) => setTimeout(() => r(false), 3000))])]);
+  clearTimeout(t);
+  return a || b ? 9 / 16 : null;
+}
+function ytId(u) {
+  const h = u.hostname.replace(/^www\./, ""); let id = null;
+  if (h === "youtu.be") id = u.pathname.split("/")[1];
+  else if (/(^|\.)youtube(-nocookie)?\.com$/.test(h)) { const s = u.pathname.split("/").filter(Boolean); id = ["embed", "shorts", "live", "v"].includes(s[0]) ? s[1] : u.searchParams.get("v"); }
+  return id && /^[\w-]+$/.test(id) ? id : null;
+}
+const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+let plTimer = null;
+let plRatio = 16 / 9, plKnown = true, plRO = null; // plKnown=false: اتجاه الفيديو مش معروف، فبيملا الشاشة ويسيب يوتيوب يظبطه
+const plIsFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+/** بيظبط مقاس الفيديو على مساحة الشاشة المتاحة حسب اتجاهه (طولي/عرضي) من غير قص. */
+function fitPlayer() {
+  const fr = $("plfr"), st = $("plst"), inn = document.querySelector(".pl-in");
+  if (!fr || !st || !inn) return;
+  const fs = inn.classList.contains("fs");
+  inn.classList.toggle("pv", fs && (plRatio < 1 || !plKnown)); // ملء الشاشة: الهيدر والشريط فوق الفيديو
+  const aw = st.clientWidth || inn.clientWidth;
+  const ah = fs ? st.clientHeight : Math.max(200, window.innerHeight * 0.66);
+  let w = aw, h = w / plRatio;
+  if (h > ah) { h = ah; w = h * plRatio; }
+  if (fs && !plKnown) { w = aw; h = ah; } // مش عارفين الاتجاه: الإطار ياخد الشاشة كلها ويوتيوب بيظبط الفيديو جواه
+  fr.style.width = Math.floor(w) + "px"; fr.style.height = Math.floor(h) + "px"; fr.style.aspectRatio = "auto";
+}
+function setPlRatio(r) { if (r && isFinite(r)) { plRatio = r; fitPlayer(); } }
+async function setPlFs(on) {
+  const inn = document.querySelector(".pl-in"); if (!inn) return;
+  inn.classList.toggle("fs", on); if (!on) delete inn.dataset.native;
+  if (inn.dataset.vid) { try { localStorage.setItem("plfs:" + inn.dataset.vid, on ? "1" : "0"); } catch {} }
+  const b = $("plfs"); if (b) { b.textContent = on ? "▭" : "⛶"; b.setAttribute("aria-label", on ? "تصغير" : "تكبير"); }
+  try {
+    if (on) {
+      const rq = inn.requestFullscreen || inn.webkitRequestFullscreen;
+      if (rq && !plIsFs()) await rq.call(inn);
+      // بيقلب الشاشة على اتجاه الفيديو بس لو الاتجاه معروف بجد؛ غير كده بيسيب الموبايل على وضعه
+      if (plKnown) { try { await screen.orientation.lock(plRatio < 1 ? "portrait" : "landscape"); } catch {} }
+    } else {
+      try { screen.orientation.unlock(); } catch {}
+      if (plIsFs()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+  } catch {}
+  fitPlayer(); setTimeout(fitPlayer, 150); setTimeout(fitPlayer, 400);
+}
+function onFsChange() { // خروج بزر الرجوع/Esc
+  const inn = document.querySelector(".pl-in");
+  if (inn && inn.classList.contains("fs") && !plIsFs() && inn.dataset.native === "1") setPlFs(false);
+  if (inn && plIsFs()) inn.dataset.native = "1";
+  fitPlayer();
+}
+document.addEventListener("fullscreenchange", onFsChange);
+document.addEventListener("webkitfullscreenchange", onFsChange);
+window.addEventListener("resize", () => { fitPlayer(); setTimeout(fitPlayer, 200); });
+window.addEventListener("orientationchange", () => setTimeout(fitPlayer, 250));
+/** بيبني إطار الفيديو + الستيج؛ inner = محتوى الإطار. */
+function frameHtml(inner, ratio, known = true) { plRatio = ratio; plKnown = known; return `<div class="pl-stage" id="plst"><div class="pl-frame" id="plfr">${inner}</div></div>`; }
+function afterFrame() {
+  fitPlayer();
+  if (plRO) plRO.disconnect();
+  if (window.ResizeObserver && $("plst")) { plRO = new ResizeObserver(fitPlayer); plRO.observe($("plst")); }
+}
+function closePlayer() {
+  clearInterval(plTimer); if (plRO) { plRO.disconnect(); plRO = null; }
+  try { screen.orientation.unlock(); } catch {}
+  if (plIsFs()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch {} }
+  const el = $("pl"); if (el) el.remove();
+}
+function playerShell(title) {
+  closePlayer();
+  const el = document.createElement("div"); el.id = "pl"; el.className = "pl";
+  el.innerHTML = `<div class="pl-in"><div class="pl-hd"><b>${esc(title)}</b><button id="plfs" aria-label="تكبير" title="تكبير">⛶</button><button id="plx" aria-label="إغلاق">✕</button></div><div id="plbody"><div class="spinner"></div></div></div>`;
+  el.onclick = (e) => { if (e.target === el) closePlayer(); };
+  document.body.appendChild(el); $("plx").onclick = closePlayer;
+  $("plfs").onclick = () => setPlFs(!document.querySelector(".pl-in").classList.contains("fs"));
+  return $("plbody");
+}
+function playerMsg(body, text, c) {
+  body.innerHTML = `<div class="pl-msg">${esc(text)}${c ? '<br><button class="btn" id="plbuy">' + (c.is_free ? "ابدأ الدورة مجانًا" : "اشترك في الدورة") + "</button>" : ""}</div>`;
+  if (c) $("plbuy").onclick = () => { closePlayer(); startPurchase(c); };
+}
+async function openLesson(id, c) {
+  const title = ar(c, "title");
+  const body = playerShell(title);
+  const r = await sb.rpc("web_lesson_media", { p_lesson_id: id });
+  if (r.error) {
+    const m = String(r.error.message || r.error.code || "");
+    if (/UNAUTHORIZED|NOT_ENROLLED/.test(m)) return playerMsg(body, "الدرس ده للمشتركين بس. اشترك في الدورة (أو سجّل دخولك لو مشترك) وهيتفتح على طول.", c);
+    return playerMsg(body, "الدرس ده مش متاح دلوقتي.");
+  }
+  const raw = String(r.data?.video_url || "").trim();
+  let u; try { u = new URL(raw); } catch { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) return playerMsg(body, "مفيش فيديو متاح للدرس ده.");
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+
+  const yid = ytId(u);
+  if (yid) { // يوتيوب: من غير أدوات يوتيوب الأصلية، وطبقة فوقه تمنع الضغط على عنوانه/زر المشاركة
+    const ratio = await ytRatio(u, yid); // 9/16 أو 16/9 أو null (مش عارف)
+    if (!$("plbody")) return; // اتقفل الفيديو وإحنا بنجهّز
+    document.querySelector(".pl-in").dataset.vid = yid;
+    body.innerHTML = frameHtml('<div id="ytp"></div><div class="pl-shield" id="ytsh"></div>', ratio || 16 / 9, !!ratio) +
+      `<div class="pl-bar"><button id="ytpp" aria-label="تشغيل">▶</button><input type="range" id="ytsk" min="0" max="1000" value="0" /><span id="ytt">0:00 / 0:00</span><button id="ytrot" aria-label="تبديل الاتجاه" title="طولي / عرضي">⟳</button></div>`;
+    afterFrame();
+    let wantFs = !!ratio && ratio < 1; // الطولي يفتح ملء الشاشة أوتوماتيك
+    try { if (localStorage.getItem("plfs:" + yid) === "1") wantFs = true; } catch {} // ولو كنت فاتحه ملء الشاشة قبل كده
+    if (wantFs) setPlFs(true);
+    $("ytrot").onclick = async () => { // ⟳
+      if (plKnown) { setPlRatio(1 / plRatio); try { localStorage.setItem("plr:" + yid, plRatio < 1 ? "p" : "l"); } catch {} }
+      if (!document.querySelector(".pl-in").classList.contains("fs")) await setPlFs(true);
+      const want = plKnown ? (plRatio < 1 ? "portrait" : "landscape") : String(screen.orientation?.type || "").startsWith("portrait") ? "landscape" : "portrait";
+      try { await screen.orientation.lock(want); } catch {}
+    };
+    await loadYT();
+    const P = new YT.Player("ytp", { host: "https://www.youtube-nocookie.com", videoId: yid,
+      playerVars: { controls: 0, rel: 0, playsinline: 1, modestbranding: 1, iv_load_policy: 3, disablekb: 1, fs: 0 },
+      events: { onStateChange: (e) => { $("ytpp").textContent = e.data === 1 ? "⏸" : "▶"; } } });
+    const toggle = () => { try { P.getPlayerState() === 1 ? P.pauseVideo() : P.playVideo(); } catch {} };
+    $("ytpp").onclick = toggle; $("ytsh").onclick = toggle;
+    let drag = false; const sk = $("ytsk");
+    sk.oninput = () => { drag = true; }; sk.onchange = () => { drag = false; try { P.seekTo((sk.value / 1000) * P.getDuration(), true); } catch {} };
+    plTimer = setInterval(() => { try { const d = P.getDuration() || 0, t = P.getCurrentTime() || 0; if (!drag && d) sk.value = Math.round((t / d) * 1000); $("ytt").textContent = `${fmt(t)} / ${fmt(d)}`; } catch {} }, 500);
+    return;
+  }
+  let embed = null;
+  if (host === "player.vimeo.com") embed = u.href;
+  else if (host === "vimeo.com") { const m = u.pathname.match(/\/(\d+)/); if (m) embed = `https://player.vimeo.com/video/${m[1]}`; }
+  else if (host === "drive.google.com") { const m = u.pathname.match(/\/file\/d\/([\w-]+)/) || [null, u.searchParams.get("id")]; if (m[1] && /^[\w-]+$/.test(m[1])) embed = `https://drive.google.com/file/d/${m[1]}/preview`; }
+  if (embed) {
+    body.innerHTML = frameHtml(`<iframe src="${esc(embed)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer"></iframe>`, 16 / 9, false) +
+      `<div class="pl-bar"><span style="flex:1"></span><button id="ytrot" aria-label="تبديل الاتجاه" title="طولي / عرضي">⟳</button></div>`;
+    afterFrame(); $("ytrot").onclick = async () => { if (!document.querySelector(".pl-in").classList.contains("fs")) await setPlFs(true); try { await screen.orientation.lock(String(screen.orientation?.type || "").startsWith("portrait") ? "landscape" : "portrait"); } catch {} }; return;
+  }
+  if (/\.(mp4|m4v|mov|webm|m3u8|ogg)(\?|#|$)/i.test(u.pathname + u.search)) {
+    body.innerHTML = frameHtml(`<video src="${esc(u.href)}" controls playsinline controlsList="nodownload" disablePictureInPicture></video>`, 16 / 9);
+    afterFrame();
+    const vd = body.querySelector("video"); // اتجاه الفيديو الحقيقي من أبعاده
+    vd.addEventListener("loadedmetadata", () => { if (vd.videoWidth && vd.videoHeight) setPlRatio(vd.videoWidth / vd.videoHeight); });
+    return;
+  }
+  playerMsg(body, "نوع الفيديو ده مش مدعوم في الصفحة. افتح الدرس من التطبيق.");
+}
+
+// ── الاشتراك: دخول ← (حالة الاشتراك) ← دفع ─────────────────────────────
+const GOOGLE_G = `<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+const ERR = {
+  ALREADY_ENROLLED: "أنت مشترك في الدورة دي بالفعل.",
+  COURSE_NOT_AVAILABLE: "الدورة دي لم تعد متاحة.",
+  ACCOUNT_NOT_ACTIVE: "حسابك مش مفعّل. كلّم الإدارة.",
+  MANUAL_METHOD_UNAVAILABLE: "المحفظة دي مش متاحة دلوقتي، اختار غيرها.",
+  SENDER_PHONE_INVALID: "رقم المحفظة اللي حوّلت منه لازم يكون موبايل مصري صحيح (01xxxxxxxxx).",
+  SENDER_PHONE_REQUIRED: "اكتب الرقم اللي حوّلت منه.",
+  MANUAL_BRAND_REQUIRED: "اختار المحفظة اللي حوّلت عليها.",
+  PROOF_REQUIRED: "ارفع صورة إثبات التحويل.",
+  PROOF_INVALID: "صورة الإثبات مش مقبولة، ارفعها تاني.",
+  ORDER_ALREADY_PAID: "الطلب ده اتدفع بالفعل.",
+  ORDER_NOT_PAYABLE: "الطلب ده مش متاح للدفع.",
+  REQUEST_ALREADY_APPROVED: "التحويل ده اتأكد بالفعل.",
+  UNAUTHORIZED: "سجّل الدخول الأول.",
+};
+function errText(e) {
+  const m = String((e && (e.code || e.message || e.error_description || e.error)) || e || "");
+  for (const k in ERR) if (m.includes(k)) return ERR[k];
+  if (/Invalid login/i.test(m)) return "الإيميل أو كلمة السر غلط.";
+  if (/already registered|already been registered/i.test(m)) return "الإيميل ده عنده حساب بالفعل. ادخل بكلمة السر بتاعته.";
+  return "حصلت مشكلة، جرّب تاني.";
+}
+/** بينده دالة checkout وبيرجّع { ok, ... } أو بيرمي Error فيه كود الخطأ اللي رجّعه السيرفر. */
+async function checkout(body) {
+  const { data, error } = await sb.functions.invoke("checkout", { body });
+  if (error) {
+    let code = "";
+    try { const j = await error.context.json(); code = j.error || ""; } catch { /* ignore */ }
+    const e = new Error(code || error.message); e.code = code; throw e;
+  }
+  if (data && data.error) { const e = new Error(data.error); e.code = data.error; throw e; }
+  return data;
+}
+
+let SESSION_USER = null;
+async function currentUser() {
+  const { data: { session } } = await sb.auth.getSession();
+  const u = session?.user || null;
+  return u && !u.is_anonymous ? u : null;
+}
+let PLAN = "ONCE"; // ONCE = دفعة واحدة، MONTH = اشتراك شهري
+const dateAr = (iso) => { try { return new Date(iso).toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" }); } catch { return String(iso).slice(0, 10); } };
+/** صف تسجيل المستخدم في الكورس بأي حالة (ساري، منتهي، محتاج دفع) — أو null. */
+async function getEnrollment(uid, cid) {
+  try {
+    const x = await sb.from("enrollments").select("id,status,access_type,expires_at").eq("user_id", uid).eq("course_id", cid).limit(1);
+    return (x.data && x.data[0]) || null;
+  } catch { return null; }
+}
+/** بيدّي دخول دلوقتي: ACTIVE ومن غير ما يكون الشهر خلص. */
+const enrollmentActive = (en) => !!en && en.status === "ACTIVE" && !(en.expires_at && new Date(en.expires_at).getTime() <= Date.now());
+async function isEnrolled(uid, cid) { return enrollmentActive(await getEnrollment(uid, cid)); }
+/** بيوصّل المستخدم للدروس: بينزل لقائمة المحتوى وبيشغّل أول درس فيديو. */
+function openCourseLessons(c, autoplay = true) {
+  const first = document.querySelector("[data-l]");
+  const list = first ? first.closest(".box") : null;
+  if (list) list.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (first && autoplay) setTimeout(() => openLesson(first.dataset.l, c), 350);
+  else if (!first) toast("مفيش دروس فيديو متاحة لسه");
+}
+async function startPurchase(c, renew = false) {
+  SESSION_USER = await currentUser();
+  if (!SESSION_USER) return viewLogin(c);
+  // المشترك (دفعة واحدة أو شهري ساري) يدخل على طول — إلا لو بيجدد اشتراكه الشهري
+  if (!renew && (await isEnrolled(SESSION_USER.id, c.id))) return viewCourse(c.id, { open: true });
+  viewPurchase(c, renew);
+}
+
+function viewLogin(c, mode = "in") {
+  chrome("الاشتراك", () => viewCourse(c.id), false);
+  const up = mode === "up";
+  mount(`
+    <div class="box">
+      <p class="muted" style="margin-top:0">سجّل الدخول بحسابك في 7PRO علشان تكمّل الاشتراك في «${esc(ar(c, "title"))}».</p>
+      <button class="btn google" id="google">${GOOGLE_G}<span>الدخول بحساب Google</span></button>
+      <div class="sep">أو بالإيميل</div>
+      <div class="tabs" style="margin-top:14px"><button id="tIn" class="${up ? "" : "on"}">تسجيل الدخول</button><button id="tUp" class="${up ? "on" : ""}">إنشاء حساب</button></div>
+      ${up ? `<label>الاسم بالكامل</label><input class="f" id="nm" autocomplete="name" />` : ""}
+      <label>الإيميل</label><input class="f ltr" id="em" type="email" autocomplete="email" inputmode="email" />
+      <label>كلمة السر</label><input class="f ltr" id="pw" type="password" autocomplete="${up ? "new-password" : "current-password"}" placeholder="${up ? "6 حروف أو أكتر" : ""}" />
+      ${up ? `<label>رقم الموبايل (اختياري)</label><input class="f ltr" id="ph" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" />` : ""}
+      <div id="msg"></div>
+      <button class="btn" id="login" style="margin-top:16px">${up ? "إنشاء الحساب والمتابعة" : "دخول"}</button>
+      ${up ? "" : `<div style="text-align:center;margin-top:6px"><button class="linkbtn" id="forgot">نسيت كلمة السر؟</button></div>`}
+    </div>`);
+  const msg = (t, ok) => ($("msg").innerHTML = `<div class="${ok ? "ok2" : "err"}">${esc(t)}</div>`);
+  $("tIn").onclick = () => viewLogin(c, "in");
+  $("tUp").onclick = () => viewLogin(c, "up");
+  if (up) $("ph").oninput = () => { $("ph").value = digits($("ph").value).slice(0, 11); };
+  $("google").onclick = async () => {
+    $("google").disabled = true;
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + "?course=" + c.id + "&buy=1" } });
+    if (error) { $("google").disabled = false; msg(errText(error)); }
+  };
+  const submit = async () => {
+    const email = $("em").value.trim(), password = $("pw").value;
+    if (up) {
+      const name = $("nm").value.trim(), phone = digits($("ph").value);
+      if (!name) return msg("اكتب اسمك.");
+      if (!email) return msg("اكتب الإيميل.");
+      if (password.length < 6) return msg("كلمة السر لازم تكون 6 حروف أو أكتر.");
+      if (phone && !PHONE_RE.test(phone)) return msg("رقم الموبايل لازم يكون مصري صحيح (01xxxxxxxxx) أو سيبه فاضي.");
+      $("login").disabled = true;
+      const data = { full_name: name }; if (phone) data.phone = phone;
+      const { data: res, error } = await sb.auth.signUp({ email, password, options: { data } });
+      if (error) { $("login").disabled = false; return msg(errText(error)); }
+      if (!res.session) {
+        const li = await sb.auth.signInWithPassword({ email, password });
+        if (li.error) {
+          $("login").disabled = false;
+          if (res.user && Array.isArray(res.user.identities) && res.user.identities.length === 0) { viewLogin(c, "in"); return setTimeout(() => msg("الإيميل ده عنده حساب بالفعل. ادخل بكلمة السر بتاعته."), 0); }
+          return msg("تعذّر إنشاء الحساب. جرّب تاني أو ادخل بـ Google.");
+        }
+      }
+    } else {
+      if (!email || !password) return msg("اكتب الإيميل وكلمة السر.");
+      $("login").disabled = true;
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) { $("login").disabled = false; return msg(errText(error)); }
+    }
+    await sb.rpc("ensure_my_profile").then(() => {}, () => {});
+    startPurchase(c);
+  };
+  $("login").onclick = submit;
+  $("pw").onkeydown = (e) => { if (e.key === "Enter") submit(); };
+  if (!up) $("forgot").onclick = async () => {
+    const email = $("em").value.trim();
+    if (!email) return msg("اكتب الإيميل الأول وبعدين اضغط «نسيت كلمة السر».");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname + "?course=" + c.id });
+    if (error) return msg(errText(error));
+    msg("بعتنا رابط إعادة تعيين كلمة السر على إيميلك.", true);
+  };
+}
+
+/** حالة المستخدم مع الدورة دي: مشترك؟ عنده تحويل قيد المراجعة؟ */
+async function viewPurchase(c, renew = false) {
+  chrome("الاشتراك", () => viewCourse(c.id), false);
+  loading();
+  const uid = SESSION_USER.id;
+  const [enr, mp] = await Promise.all([
+    renew ? Promise.resolve([]) : getEnrollment(uid, c.id).then((en) => (enrollmentActive(en) ? [en] : []), () => []),
+    sb.from("manual_payment_requests").select("status,review_note,created_at").eq("user_id", uid).eq("course_id", c.id).order("created_at", { ascending: false }).limit(1).then((x) => (x.data || [])[0] || null, () => null),
+  ]);
+  const title = esc(ar(c, "title"));
+  if (enr.length) return viewCourse(c.id, { open: true });
+  if (mp && mp.status === "PENDING") return mount(`<div class="box center"><div style="font-size:46px">⏳</div><h3 style="margin:0 0 8px">التحويل قيد المراجعة</h3><p class="muted">الإدارة بتراجع إثبات الدفع على «${title}». هيوصلك إشعار في التطبيق أول ما يتأكد.</p><button class="btn ghost" id="bk">رجوع للدورة</button></div>`) || ($("bk").onclick = () => viewCourse(c.id));
+  const rejected = mp && mp.status === "REJECTED" ? `<div class="err">${esc(mp.review_note || "لم نتمكن من تأكيد التحويل السابق. ابعت إثبات الدفع تاني.")}</div>` : "";
+  viewCheckout(c, rejected);
+}
+
+let COUPON = "";
+const itemType = () => (PLAN === "MONTH" ? "COURSE_MONTHLY" : "COURSE");
+async function viewCheckout(c, banner = "") {
+  chrome("الدفع", () => viewCourse(c.id), false);
+  loading();
+  let quote;
+  try {
+    const r = await checkout({ action: "quote", item_type: itemType(), course_id: c.id, coupon_code: COUPON || null });
+    quote = r.quote;
+  } catch (e) { return mount(`<div class="box center"><div style="font-size:46px">⚠️</div><p class="muted">${esc(errText(e))}</p><button class="btn ghost" id="bk">رجوع للدورة</button></div>`) || ($("bk").onclick = () => viewCourse(c.id)); }
+
+  const total = Number(quote.total_amount), cur = quote.currency;
+  const free = total <= 0;
+  const cp = quote.coupon;
+  const couponMsg = COUPON ? (cp && cp.valid ? `<div class="ok2">تم تطبيق الكود ✓ (خصم ${esc(money(quote.discount_amount, cur))})</div>` : `<div class="err">الكود غير صالح.</div>`) : "";
+
+  const summary = `<div class="box">
+    <div class="kv"><span>الدورة</span><b>${esc(ar(c, "title"))}</b></div>
+    ${PLAN === "MONTH" ? '<div class="kv"><span>النوع</span><b>اشتراك شهري</b></div>' : ""}
+    <div class="kv"><span>${PLAN === "MONTH" ? "السعر / شهر" : "السعر"}</span><b>${esc(money(quote.list_price, cur))}</b></div>
+    ${Number(quote.discount_amount) > 0 ? `<div class="kv"><span>الخصم</span><b>- ${esc(money(quote.discount_amount, cur))}</b></div>` : ""}
+    <div class="kv"><span>الإجمالي</span><b style="color:var(--amber);font-size:19px">${free ? "مجانًا" : esc(money(total, cur))}</b></div></div>`;
+
+  const monthNote = PLAN === "MONTH" ? '<div class="note">الاشتراك بيفتح الدورة لمدة شهر من تاريخ التأكيد. بعد كده بيتقفل لحد ما تجدد (مفيش خصم تلقائي).</div>' : "";
+  const couponBox = `<div class="box"><label style="margin-top:0">عندك كود خصم؟</label>
+    <div class="coupon"><input class="f ltr" id="cc" placeholder="CODE" value="${esc(COUPON)}" autocapitalize="characters" /><button class="btn" id="ca">تطبيق</button></div>${couponMsg}</div>`;
+
+  if (free) {
+    mount(banner + summary + monthNote + couponBox + `<div id="msg"></div><button class="btn" id="go">${Number(quote.list_price) > 0 ? "تأكيد الاشتراك" : "ابدأ الدورة"}</button>`);
+    bindCoupon(c);
+    $("go").onclick = async () => {
+      $("go").disabled = true;
+      try { await checkout({ action: "create", item_type: itemType(), course_id: c.id, coupon_code: COUPON || null, idempotency_key: crypto.randomUUID() }); COUPON = ""; await viewCourse(c.id, { open: true }); toast("تم الاشتراك ✓ — استمتع بالدروس"); }
+      catch (e) { $("go").disabled = false; $("msg").innerHTML = `<div class="err">${esc(errText(e))}</div>`; }
+    };
+    return;
+  }
+
+  const w = await sb.from("manual_payment_accounts").select("brand,phone,holder_name,instructions,sort_order").eq("is_enabled", true).order("sort_order").then((x) => (x.data || []).filter((a) => (a.phone || "").trim()), () => []);
+  if (!w.length) return mount(banner + summary + '<div class="box center"><div style="font-size:46px">💳</div><b>مفيش طريقة دفع متاحة دلوقتي</b><p class="muted">كلّم الإدارة أو ادفع من التطبيق.</p></div>');
+
+  let sel = w[0], file = null, uploaded = null, sp = "", nt = "";
+  const draw = () => {
+    mount(banner + summary + monthNote + couponBox + `
+      <div class="note">حوّل ${esc(money(total, cur))} على إحدى المحافظ دي، وبعدها ارفع صورة التحويل وسجّل الرقم اللي حوّلت منه.</div>
+      <div class="wallets">${w.map((x) => `<button class="wallet ${x.brand === sel.brand ? "sel" : ""}" data-b="${esc(x.brand)}"><div class="wi">${esc(brandName(x.brand).slice(0, 1))}</div><div style="flex:1"><b>${esc(brandName(x.brand))}</b>${x.holder_name ? `<div class="muted" style="font-size:13px">${esc(x.holder_name)}</div>` : ""}</div><span>${x.brand === sel.brand ? "✓" : ""}</span></button>`).join("")}</div>
+      <div class="numbox"><div class="num">${esc(sel.phone)}</div><button id="cpn">نسخ</button></div>
+      ${sel.instructions ? `<p class="muted">${esc(sel.instructions)}</p>` : ""}
+      <div class="box">
+        <label style="margin-top:0">الرقم اللي حوّلت منه</label><input class="f ltr" id="sp" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" value="${esc(sp)}" />
+        <label>صورة إثبات التحويل</label>
+        <label class="file ${file ? "has" : ""}" style="margin-top:0"><input id="pf" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />${file ? "✓ " + esc(file.name) : "اضغط لرفع صورة التحويل (حتى 5 ميجا)"}</label>
+        <label>ملاحظات (اختياري)</label><input class="f" id="nt" value="${esc(nt)}" />
+        <p class="muted" style="margin:10px 0 0;font-size:13px">بعد الإرسال، الإدارة بتراجع التحويل وبتأكد اشتراكك.</p>
+        <div id="msg"></div>
+        <button class="btn" id="send" style="margin-top:14px">إرسال إثبات الدفع</button>
+      </div>`);
+    bindCoupon(c, keep);
+    document.querySelectorAll("[data-b]").forEach((b) => (b.onclick = () => { keep(); sel = w.find((x) => x.brand === b.dataset.b); draw(); }));
+    $("cpn").onclick = async () => { try { await navigator.clipboard.writeText(sel.phone); } catch { const t = document.createElement("textarea"); t.value = sel.phone; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } $("cpn").textContent = "اتنسخ ✓"; };
+    $("sp").oninput = () => { $("sp").value = digits($("sp").value).slice(0, 11); };
+    $("pf").onchange = (e) => { keep(); file = e.target.files[0] || null; uploaded = null; draw(); };
+    $("send").onclick = send;
+  };
+  const keep = () => { if ($("sp")) sp = $("sp").value; if ($("nt")) nt = $("nt").value; };
+  const send = async () => {
+    keep();
+    const sender = digits(sp);
+    const msg = (t) => ($("msg").innerHTML = `<div class="err">${esc(t)}</div>`);
+    if (!PHONE_RE.test(sender)) return msg(ERR.SENDER_PHONE_INVALID);
+    if (!file) return msg(ERR.PROOF_REQUIRED);
+    $("send").disabled = true; $("send").textContent = "جاري الإرسال…";
+    try {
+      if (!uploaded || uploaded.file !== file) {
+        const prepared = await prepImage(file);
+        if (prepared.size > MAX_PROOF_BYTES) throw new Error("الصورة أكبر من 5 ميجا.");
+        const safe = (prepared.name || "proof.jpg").replace(/[^A-Za-z0-9._-]/g, "_").slice(-60) || "proof.jpg";
+        const path = `${SESSION_USER.id}/${Date.now()}-${safe}`;
+        const up = await sb.storage.from(PROOF_BUCKET).upload(path, prepared, { upsert: false, contentType: prepared.type || guessType(prepared.name) });
+        if (up.error) throw up.error;
+        uploaded = { file, path };
+      }
+      await checkout({
+        action: "create", item_type: itemType(), course_id: c.id, coupon_code: COUPON || null,
+        manual: true, manual_brand: sel.brand, sender_phone: sender, proof_path: uploaded.path, note: nt.trim() || null,
+        idempotency_key: crypto.randomUUID(),
+      });
+      COUPON = ""; viewDone(c, "MANUAL");
+    } catch (e) {
+      $("send").disabled = false; $("send").textContent = "إرسال إثبات الدفع";
+      msg(e instanceof Error && e.message.includes("5 ميجا") ? e.message : /mime|type/i.test(String(e?.message)) ? "ارفع صورة بصيغة JPG أو PNG أو WEBP." : errText(e));
+    }
+  };
+  draw();
+}
+function bindCoupon(c, before) {
+  $("ca").onclick = () => { before && before(); COUPON = $("cc").value.trim(); viewCheckout(c); };
+}
+const guessType = (n = "") => (/\.png$/i.test(n) ? "image/png" : /\.webp$/i.test(n) ? "image/webp" : /\.hei[cf]$/i.test(n) ? "image/heic" : "image/jpeg");
+async function prepImage(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size <= 900 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement("canvas"); cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+    cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+    const blob = await new Promise((r) => cv.toBlob(r, "image/jpeg", 0.82));
+    if (blob && blob.size < file.size) return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch { /* الأصلية */ }
+  return file;
+}
+function viewDone(c, kind) {
+  chrome("تم", null, false);
+  const title = esc(ar(c, "title"));
+  mount(`<div class="box center"><div style="font-size:54px">✅</div>
+    <h3 style="margin:0 0 8px">${kind === "FREE" ? `اشتركت في «${title}»` : "وصلنا إثبات الدفع"}</h3>
+    <p class="muted">${kind === "FREE" ? "افتح تطبيق 7PRO وابدأ الدورة من «دوراتي»." : `تحويلك على «${title}» دلوقتي عند الإدارة للمراجعة. هيوصلك إشعار في تطبيق 7PRO أول ما يتأكد ويتفتح لك المحتوى.`}</p>
+    ${APP_URL ? `<a class="btn" href="${esc(APP_URL)}" target="_blank" rel="noopener">حمّل / افتح التطبيق</a>` : ""}
+    <button class="btn ghost" id="bk">رجوع للدورات</button></div>`);
+  $("bk").onclick = () => go("");
+}
+
+async function route() {
+  const q = new URLSearchParams(location.search);
+  const p = q.get("course");
+  if (p && UUID_RE.test(p)) {
+    await viewCourse(p);
+    // رجع من دخول Google وهو في نص الاشتراك: يكمّل من نفس النقطة.
+    if (q.get("buy") === "1" && (await currentUser())) {
+      const u = new URL(location.href); u.searchParams.delete("buy"); history.replaceState({}, "", u);
+      $("buy") && $("buy").click();
+    }
+  } else viewCatalog();
+}
+route();
+</script>
+</body>
+</html>

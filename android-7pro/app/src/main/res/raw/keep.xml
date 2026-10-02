@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fonts are looked up by name at run time (see ArabicFonts in Theme.kt), which resource
+     shrinking cannot see; keep them so a release build does not strip them. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@font/*" />

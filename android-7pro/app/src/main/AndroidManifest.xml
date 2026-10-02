@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Needed on Android 13+ before any notification can be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Incoming classroom "call": rings/vibrates and opens over the lock screen, exactly like a
+         normal phone call, when the teacher starts a session the student is invited to. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Green frame around the screen while sharing it (ScreenShareFrame); optional, asked once. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+
+    <!-- Virtual Classroom (Jitsi): camera/mic for the call, plus the
+         foreground-service types Android 14+ requires to keep a call and a
+         screen share alive while the app is backgrounded. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Jitsi Meet SDK and every react-native-* module it bundles are republished with minSdk 26;
+         the app itself supports 24+ (Jitsi is gated behind SDK_INT >= 26 everywhere it's touched
+         — SevenProApp, the classroom lobby, the incoming call, the Home live card — so on
+         Android 7 the app installs and runs and only in-app live video is unavailable).
+         jitsiOverrideLibraries is computed in app/build.gradle.kts by reading the package name out
+         of every resolved dependency whose version carries Jitsi's own "-jitsi-<qualifier>" tag,
+         so a future SDK bump that adds/renames a bundled module (this is how react-native-giphy
+         and react-native-video showed up) no longer needs a manual edit here. -->
+    <uses-sdk tools:overrideLibrary="${jitsiOverrideLibraries}" />
+
+    <application
+        android:allowBackup="false"
+        android:name=".SevenProApp"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="7PRO"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.RorkApp"
+        tools:replace="android:allowBackup,android:label,android:icon,android:roundIcon,android:theme,android:fullBackupContent">
+        <!--
+            Handling these changes in-process keeps the app where the user left it: rotating for a
+            fullscreen video, switching language, or resizing the window no longer restarts the
+            activity (which would drop the open screen and the running player).
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.RorkApp">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Where Google sign-in returns after the browser step. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sevenpro" android:host="auth" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Virtual Classroom call screen: hosts the Jitsi Meet view plus our own
+            chat/whiteboard/hand-raise panel. Runs as its own Activity (rather than
+            a Compose destination in MainActivity's NavHost) because the Jitsi SDK
+            manages its own React Native lifecycle underneath the view it hands
+            back, which is far more reliable isolated from the rest of the nav
+            graph. android:screenOrientation left unset so it follows Jitsi's own
+            portrait/landscape handling.
+
+            PICTURE-IN-PICTURE: supportsPictureInPicture alone is not enough —
+            Android silently refuses to shrink an Activity that is not also
+            resizeable, which is why the call used to disappear instead of
+            becoming a floating window when the teacher pressed Home. The pair
+            (supportsPictureInPicture + resizeableActivity) is what actually
+            enables it; ClassroomCallActivity then supplies the aspect ratio and
+            the Android 12+ "auto enter" flag itself (see buildPipParams there).
+
+            excludeFromRecents was REMOVED on purpose: with PiP, the call is meant
+            to survive leaving the screen, so the teacher must be able to get back
+            to it from the recents switcher too. autoRemoveFromRecents keeps the
+            original intent of that flag — nothing lingers in recents once the
+            Activity actually finishes (i.e. once the class really ends).
+        -->
+        <activity
+            android:name=".classroom.ClassroomCallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
+            android:autoRemoveFromRecents="true"
+            android:theme="@style/Theme.RorkApp" />
+
+        <!--
+            Incoming classroom "call" screen: opened by ClassroomFcmService's full-screen intent
+            the moment a CLASSROOM_CALL push arrives, over the lock screen if needed — the same
+            mechanism every normal calling app uses. Accept joins straight into
+            ClassroomCallActivity; Decline just dismisses. turnScreenOn/showWhenLocked are also
+            set programmatically in the Activity itself for pre-Android-8.1 devices where the
+            manifest attributes below don't exist.
+        -->
+        <activity
+            android:name=".classroom.IncomingClassroomCallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.RorkApp" />
+
+        <!-- Delivery transport for the incoming-call push (see push/ClassroomFcmService). -->
+        <!-- Lets the camera app write the photo the support chat asked for. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/camera_paths" />
+        </provider>
+
+        <service
+            android:name=".push.ClassroomFcmService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Real AdMob application id, supplied at build time. Ad unit ids stay dynamic. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+        <!--
+            The ads SDK normally starts itself from a content provider and crashes the app when no
+            application id is configured. 7PRO starts it by hand instead, only once a real id is
+            present, so a build without ads simply never touches the SDK.
+        -->
+        <provider
+            android:name="com.google.android.gms.ads.MobileAdsInitProvider"
+            android:authorities="${applicationId}.mobileadsinitprovider"
+            tools:node="remove" />
+    </application>
+
+</manifest>

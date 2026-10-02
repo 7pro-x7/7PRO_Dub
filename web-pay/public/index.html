@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#15110e" />
+<meta name="robots" content="noindex" />
+<title>7PRO — حجز جروب</title>
+<!--
+  7PRO — صفحة حجز الجروبات وتجديد الاشتراك (نسخة الويب من شاشة «حجز جروب» في التطبيق).
+
+  بتكلم نفس Supabase ونفس الدوال اللي التطبيق بيستخدمها بالظبط:
+    booking_teachers / booking_groups / recommend_nearest_booking  → عرض المعلمين والجروبات
+    request_group_booking                                          → حجز المقعد (PENDING)
+    request_subscription_renewal                                   → فتح طلب تجديد
+    submit_subscription_payment                                    → إرسال إثبات التحويل للمراجعة
+    my_subscription_state                                          → حالة اشتراك الطالب
+
+  ولا حاجة بتتفعّل من هنا: الحجز والتجديد بيفضلوا طلبات لحد ما المالك/الأدمن يوافق عليها، زي التطبيق.
+
+  الروابط:
+    /                              → كل المعلمين
+    /?teacher=<teacher_id>         → جروبات معلم معيّن
+    /?teacher=<id>&group=<id>      → حجز جروب معيّن مباشرة
+    /?renew=<subscription_id>      → تجديد اشتراك طالب معيّن (الرابط اللي بيتنسخ من لوحة المالك/الأدمن/استوديو المعلم)
+
+  الدخول: Google (بضغطة) أو إيميل وكلمة سر، وفيه تبويب «إنشاء حساب» بنفس طريقة تسجيل التطبيق.
+  صفحة واحدة، من غير build.
+-->
+<style>
+:root{
+  --bg:#15110e; --bg2:#0e0f14; --card:#17171f; --card2:#1d1d27;
+  --line:rgba(255,255,255,.08); --text:#f6f3ee; --muted:#9d9aa1;
+  --amber:#e79a4a; --amber-soft:rgba(231,154,74,.14);
+  --teal:#2fbf9b; --teal-soft:rgba(47,191,155,.13);
+  --red:#ef6b73; --green:#39c98a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{
+  background:linear-gradient(180deg,var(--bg) 0,var(--bg2) 55%,#0b0c10 100%) fixed;
+  color:var(--text);
+  font-family:"Segoe UI",Tahoma,system-ui,-apple-system,"Noto Sans Arabic",sans-serif;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.shell{max-width:520px;margin:0 auto;padding:18px 18px 40px}
+header{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+header h1{font-size:22px;margin:0;font-weight:800;flex:1}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.iconbtn[hidden]{display:none}
+.rail{display:flex;gap:8px;margin:2px 0 8px}
+.rail i{flex:1;height:5px;border-radius:9px;background:#2a2a33}
+.rail i.on{background:var(--amber)}
+.rail i.done{background:rgba(231,154,74,.45)}
+.railLabel{color:var(--amber);font-size:13px;margin-bottom:16px}
+h2{font-size:22px;margin:6px 0 14px}
+.muted{color:var(--muted);font-size:13px;line-height:1.6}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:26px;padding:16px 18px;margin-bottom:14px}
+.card.premium{border-color:rgba(231,154,74,.55)}
+.card.rec{border-color:rgba(47,191,155,.5)}
+button.card{width:100%;text-align:inherit;font:inherit;color:inherit;cursor:pointer;display:block}
+button.card:active{transform:scale(.985)}
+button.card:disabled{opacity:.5;cursor:default}
+.pillrow{display:flex;justify-content:flex-start;margin-bottom:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;letter-spacing:.4px;padding:7px 14px;border-radius:999px}
+.pill.amber{background:var(--amber-soft);color:var(--amber)}
+.pill.teal{background:var(--teal-soft);color:var(--teal)}
+.trow{display:flex;align-items:center;gap:14px}
+.avatar{width:68px;height:68px;border-radius:50%;object-fit:cover;background:var(--card2);flex:none;display:grid;place-items:center;font-size:26px;font-weight:800;color:var(--amber)}
+.tinfo{flex:1;min-width:0}
+.tname{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.thead{color:var(--muted);font-size:15px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}
+.tmeta{color:var(--muted);font-size:14px;margin-top:6px}
+.tprice{flex:none;text-align:left;font-weight:800;font-size:18px;direction:ltr}
+.tprice small{display:block;font-size:22px;margin-top:6px;font-weight:600}
+.amber{color:var(--amber)} .teal{color:var(--teal)}
+.grp{display:flex;gap:14px;align-items:center}
+.grp img{width:64px;height:64px;border-radius:18px;object-fit:cover;flex:none}
+.grp .g-ic{width:64px;height:64px;border-radius:18px;background:var(--amber-soft);color:var(--amber);font-weight:800;font-size:22px;display:grid;place-items:center;flex:none}
+.gname{font-size:18px;font-weight:800}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:15px}
+.kv:last-child{border-bottom:0}
+.kv b{font-weight:700}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+input,textarea{width:100%;font:inherit;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:14px;padding:13px 14px;outline:none}
+input:focus,textarea:focus{border-color:rgba(231,154,74,.7)}
+input.ltr{direction:ltr;text-align:right}
+textarea{min-height:76px;resize:vertical}
+.btn{width:100%;margin-top:18px;padding:15px;border:0;border-radius:16px;font:inherit;font-weight:800;font-size:16px;cursor:pointer;background:linear-gradient(180deg,#f0ad63,var(--amber));color:#1b1208}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--line)}
+.btn.google{background:#fff;color:#222}
+.err{background:rgba(239,107,115,.12);border:1px solid rgba(239,107,115,.35);color:#ff9aa0;padding:11px 14px;border-radius:14px;margin-top:14px;font-size:14px;line-height:1.6}
+.ok{background:rgba(57,201,138,.1);border:1px solid rgba(57,201,138,.3);color:#7ee0b4;padding:11px 14px;border-radius:14px;margin-top:14px;font-size:14px;line-height:1.6}
+.note{background:var(--teal-soft);color:#7fdcc4;border-radius:14px;padding:11px 14px;font-size:14px;line-height:1.6;margin:0 0 14px}
+.amount{text-align:center;padding:18px}
+.amount .n{font-size:34px;font-weight:800;color:var(--amber);direction:ltr}
+.wallets{display:grid;gap:10px;margin-bottom:6px}
+.wallet{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:18px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font:inherit;color:inherit;text-align:inherit;width:100%}
+.wallet.sel{border-color:var(--amber);background:var(--amber-soft)}
+.wallet .wi{width:40px;height:40px;border-radius:12px;background:var(--amber-soft);color:var(--amber);display:grid;place-items:center;font-weight:800;flex:none}
+.wallet .wt{flex:1}
+.wallet .wt b{display:block;font-size:16px}
+.wallet .wt span{color:var(--muted);font-size:13px}
+.numbox{display:flex;align-items:center;gap:10px;background:#111118;border:1.5px dashed rgba(231,154,74,.5);border-radius:16px;padding:12px 14px;margin:8px 0}
+.numbox .num{flex:1;font-size:22px;font-weight:800;letter-spacing:1px;direction:ltr;text-align:right}
+.numbox button{border:0;background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:8px 12px;font:inherit;font-weight:700;cursor:pointer}
+.file{display:block;border:1.5px dashed var(--line);border-radius:16px;padding:16px;text-align:center;cursor:pointer;color:var(--muted);font-size:14px}
+.file.has{border-style:solid;border-color:rgba(57,201,138,.5);color:#7ee0b4}
+.file input{display:none}
+.center{text-align:center;padding:26px 8px}
+.bigico{font-size:54px;margin-bottom:8px}
+.spinner{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--amber);animation:sp .8s linear infinite;margin:60px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12.5px}
+.foot a{color:var(--amber);cursor:pointer;text-decoration:underline}
+.tabs{display:flex;gap:6px;background:#111118;border:1px solid var(--line);border-radius:14px;padding:4px;margin-bottom:6px}
+.tabs button{flex:1;border:0;border-radius:11px;padding:10px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;background:transparent;color:var(--muted)}
+.tabs button.on{background:var(--amber-soft);color:var(--amber)}
+.btn.google{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:0}
+.btn.google svg{width:20px;height:20px;flex:none}
+.linkbtn{background:none;border:0;color:var(--amber);font:inherit;font-size:13px;cursor:pointer;padding:6px 0;text-decoration:underline}
+.sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:14px 0 0}
+.sep:before,.sep:after{content:"";flex:1;height:1px;background:var(--line)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <button class="iconbtn" id="back" hidden aria-label="رجوع">→</button>
+    <h1 id="title">حجز جروب</h1>
+  </header>
+  <div id="railWrap" hidden>
+    <div class="rail" id="rail"></div>
+    <div class="railLabel" id="railLabel"></div>
+  </div>
+  <main id="view"><div class="spinner"></div></main>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// نفس مشروع Supabase اللي التطبيق بيشاور عليه (المفتاح ده publishable وآمن يبقى في الصفحة).
+const SUPABASE_URL = "https://usbfrqbjtpvnkmmcusdi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_z4-FFrrgruER4BwM10qV_A_C0dcN6CW";
+const PROOF_BUCKET = "payment-proofs";
+const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+
+const qs = new URLSearchParams(location.search);
+const PARAM = { teacher: qs.get("teacher"), group: qs.get("group"), renew: qs.get("renew") };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const digits = (s) => String(s ?? "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\D/g, "");
+const money = (n, c = "EGP") => `${c} ${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+const PHONE_RE = /^01[0125][0-9]{8}$/;
+
+const BRANDS = { VODAFONE: "فودافون كاش", ORANGE: "أورنج كاش", ETISALAT: "اتصالات كاش", WE: "وي باي" };
+const brandName = (b) => BRANDS[String(b || "").toUpperCase()] || b;
+
+const ERR = {
+  ALREADY_SUBSCRIBED: "عندك اشتراك أو حجز شغّال بالفعل.",
+  GROUP_NOT_AVAILABLE: "الجروب ده مش متاح للحجز دلوقتي.",
+  TEACHER_NOT_AVAILABLE: "المعلم ده مش بيستقبل حجوزات حالياً.",
+  GROUP_FULL: "الجروب اكتمل عدده.",
+  PRICE_NOT_SET: "سعر الجروب لسه متحددش. كلّم الإدارة.",
+  NOTHING_TO_PAY: "مفيش مبلغ مستحق للدفع دلوقتي.",
+  PARENT_PHONE_INVALID: "رقم ولي الأمر لازم يكون موبايل مصري صحيح (01xxxxxxxxx).",
+  PARENT_NAME_REQUIRED: "اكتب اسم ولي الأمر.",
+  STUDENT_NAME_REQUIRED: "اكتب اسم الطالب.",
+  SENDER_PHONE_INVALID: "رقم المحفظة اللي حوّلت منها لازم يكون موبايل مصري صحيح (01xxxxxxxxx).",
+  PROOF_REQUIRED: "ارفع صورة إثبات التحويل.",
+  PROOF_INVALID: "صورة الإثبات مش مقبولة، ارفعها تاني.",
+  MANUAL_METHOD_UNAVAILABLE: "المحفظة دي مش متاحة دلوقتي، اختار غيرها.",
+  PAYMENT_ALREADY_APPROVED: "الدفع ده اتأكد بالفعل.",
+  ACCOUNT_NOT_ACTIVE: "حسابك مش مفعّل. كلّم الإدارة.",
+  CANNOT_RENEW_PENDING: "اشتراكك لسه مستنّي موافقة الإدارة، مينفعش يتجدد دلوقتي.",
+  SUBSCRIPTION_NOT_FOUND: "الاشتراك ده مش تابع للحساب اللي داخل بيه.",
+  UNAUTHORIZED: "سجّل الدخول الأول.",
+};
+function errText(e) {
+  const m = String((e && (e.message || e.error_description || e.error)) || e || "");
+  const due = m.match(/NOT_DUE_YET:?\s*(\d{4}-\d{2}-\d{2})?/);
+  if (due) return `التجديد لسه مفتحش. ميعاد اشتراكك${due[1] ? " " + fmtDate(due[1]) : ""} — الصفحة بتفتح قبل الميعاد بأيام قليلة.`;
+  for (const k in ERR) if (m.includes(k)) return ERR[k];
+  if (/Invalid login/i.test(m)) return "الإيميل أو كلمة السر غلط.";
+  return "حصلت مشكلة، جرّب تاني.";
+}
+function fmtDate(d) {
+  try { return new Date(d + "T00:00:00").toLocaleDateString("ar-EG", { day: "numeric", month: "long", year: "numeric" }); }
+  catch { return d; }
+}
+
+// ── الحالة ─────────────────────────────────────────────────────────────
+let user = null;
+let profile = null;
+const S = { teacher: null, group: null, form: null, pay: null };
+const stack = [];          // للرجوع
+let current = null;        // { fn, args }
+
+const STEPS = ["اختر المعلم", "اختر الجروب", "بيانات الحجز", "الدفع"];
+function chrome({ title, step = null, back = true }) {
+  $("title").textContent = title;
+  $("back").hidden = !(back && stack.length);
+  $("railWrap").hidden = step === null;
+  if (step !== null) {
+    $("rail").innerHTML = STEPS.map((_, i) => `<i class="${i === step ? "on" : i < step ? "done" : ""}"></i>`).join("");
+    $("railLabel").textContent = STEPS[step];
+  }
+}
+function mount(html) { $("view").innerHTML = html; window.scrollTo({ top: 0 }); }
+function loading() { mount('<div class="spinner"></div>'); }
+function go(fn, ...args) {
+  if (current) stack.push(current);
+  current = { fn, args };
+  fn(...args);
+}
+function replace(fn, ...args) { current = { fn, args }; fn(...args); }
+$("back").onclick = () => { const p = stack.pop(); if (p) { current = p; p.fn(...p.args); } };
+
+function footer() {
+  $("foot").innerHTML = user
+    ? `داخل بحساب ${esc(user.email || "")} — <a id="signout">تسجيل خروج</a>`
+    : "";
+  const so = $("signout");
+  if (so) so.onclick = async () => { await sb.auth.signOut(); location.reload(); };
+}
+
+// ── تسجيل الدخول / إنشاء حساب ─────────────────────────────────────────
+const GOOGLE_G = `<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+
+function viewLogin(mode = "in") {
+  const renewing = !!PARAM.renew;
+  chrome({ title: renewing ? "تجديد الاشتراك" : "حجز جروب", back: false });
+  const up = mode === "up";
+  mount(`
+    <div class="card">
+      <button class="btn google" id="google">${GOOGLE_G}<span>الدخول بحساب Google</span></button>
+      <div class="sep">أو بالإيميل</div>
+      <div class="tabs" style="margin-top:14px">
+        <button id="tIn" class="${up ? "" : "on"}">تسجيل الدخول</button>
+        <button id="tUp" class="${up ? "on" : ""}">إنشاء حساب</button>
+      </div>
+      ${up ? `<label>الاسم بالكامل</label><input id="nm" autocomplete="name" />` : ""}
+      <label>الإيميل</label>
+      <input id="em" class="ltr" type="email" autocomplete="email" inputmode="email" />
+      <label>كلمة السر</label>
+      <input id="pw" class="ltr" type="password" autocomplete="${up ? "new-password" : "current-password"}" placeholder="${up ? "6 حروف أو أكتر" : ""}" />
+      ${up ? `<label>رقم الموبايل (اختياري)</label><input id="ph" class="ltr" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" />` : ""}
+      <div id="msg"></div>
+      <button class="btn" id="login">${up ? "إنشاء الحساب والمتابعة" : "دخول"}</button>
+      ${up ? "" : `<div style="text-align:center;margin-top:6px"><button class="linkbtn" id="forgot">نسيت كلمة السر؟</button></div>`}
+    </div>
+    <p class="muted" style="text-align:center">${up ? "من غير رسالة تأكيد على الإيميل — بتكمل على طول." : "أول مرة هنا؟ اضغط «إنشاء حساب» أو ادخل بـ Google."}</p>`);
+
+  const msg = (t, ok) => ($("msg").innerHTML = `<div class="${ok ? "ok" : "err"}">${esc(t)}</div>`);
+  $("tIn").onclick = () => viewLogin("in");
+  $("tUp").onclick = () => viewLogin("up");
+  if (up) $("ph").oninput = () => { $("ph").value = digits($("ph").value).slice(0, 11); };
+
+  $("google").onclick = async () => {
+    $("google").disabled = true;
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: location.origin + location.pathname + location.search },
+    });
+    if (error) { $("google").disabled = false; msg(errText(error)); }
+  };
+
+  const submit = async () => {
+    const email = $("em").value.trim(), password = $("pw").value;
+    if (up) {
+      const name = $("nm").value.trim(), phone = digits($("ph").value);
+      if (!name) return msg("اكتب اسمك.");
+      if (!email) return msg("اكتب الإيميل.");
+      if (password.length < 6) return msg("كلمة السر لازم تكون 6 حروف أو أكتر.");
+      if (phone && !PHONE_RE.test(phone)) return msg("رقم الموبايل لازم يكون مصري صحيح (01xxxxxxxxx) أو سيبه فاضي.");
+      $("login").disabled = true;
+      // نفس الطريقة اللي التطبيق بيسجّل بيها: الاسم والموبايل بيتبعتوا مع الحساب.
+      const data = { full_name: name }; if (phone) data.phone = phone;
+      const { data: res, error } = await sb.auth.signUp({ email, password, options: { data } });
+      if (error) { $("login").disabled = false; return msg(errText(error)); }
+      if (!res.session) {
+        const li = await sb.auth.signInWithPassword({ email, password });
+        if (li.error) {
+          $("login").disabled = false;
+          // الإيميل متسجّل قبل كده: يوجّهه للدخول بدل ما يفضل حاير.
+          if (res.user && Array.isArray(res.user.identities) && res.user.identities.length === 0) { viewLogin("in"); return setTimeout(() => msg("الإيميل ده عنده حساب بالفعل. ادخل بكلمة السر بتاعته.", false), 0); }
+          return msg("تعذّر إنشاء الحساب. جرّب تاني أو ادخل بـ Google.");
+        }
+      }
+      return boot();
+    }
+    if (!email || !password) return msg("اكتب الإيميل وكلمة السر.");
+    $("login").disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { $("login").disabled = false; return msg(errText(error)); }
+    boot();
+  };
+  $("login").onclick = submit;
+  $("pw").onkeydown = (e) => { if (e.key === "Enter") submit(); };
+
+  if (!up) $("forgot").onclick = async () => {
+    const email = $("em").value.trim();
+    if (!email) return msg("اكتب الإيميل الأول وبعدين اضغط «نسيت كلمة السر».");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname + location.search });
+    if (error) return msg(errText(error));
+    msg("بعتنا رابط إعادة تعيين كلمة السر على إيميلك.", true);
+  };
+}
+
+// ── الحجز: المعلمين ────────────────────────────────────────────────────
+async function viewTeachers() {
+  chrome({ title: "حجز جروب", step: 0, back: false });
+  loading();
+  const [t, rec] = await Promise.all([
+    sb.rpc("booking_teachers"),
+    sb.rpc("recommend_nearest_booking").then((r) => r, () => ({ data: null })),
+  ]);
+  if (t.error) return fail(t.error, viewTeachers);
+  const recId = Array.isArray(rec.data) && rec.data[0] ? rec.data[0].teacher_id : null;
+  const list = t.data || [];
+  chrome({ title: "حجز جروب", step: 0, back: false });
+  if (!list.length) return mount('<div class="card center"><div class="bigico">🗓️</div><b>مفيش معلمين متاحين للحجز دلوقتي</b><p class="muted">جرّب تاني بعد شوية.</p></div>');
+  mount(`<h2>اختر المعلم</h2>` + list.map((x) => {
+    const prem = !!x.is_premium, isRec = x.teacher_id === recId;
+    const badge = isRec
+      ? `<div class="pillrow"><span class="pill teal">المقترح لك</span></div>`
+      : prem ? `<div class="pillrow"><span class="pill amber">🏅 ${esc((x.badge || "PREMIUM").toUpperCase())}</span></div>` : "";
+    const cls = isRec ? "rec" : prem ? "premium" : "";
+    const tone = isRec || prem ? "amber" : "teal";
+    const av = x.avatar_url ? `<img class="avatar" src="${esc(x.avatar_url)}" alt="" referrerpolicy="no-referrer" />` : `<div class="avatar">${esc((x.full_name || "?").slice(0, 1))}</div>`;
+    return `<button class="card ${cls}" data-t="${esc(x.teacher_id)}">
+      ${badge}
+      <div class="trow">
+        ${av}
+        <div class="tinfo"><div class="tname">${esc(x.full_name)}</div>
+          ${x.headline ? `<div class="thead">${esc(x.headline)}</div>` : ""}
+          <div class="tmeta">👥 ${x.groups_count} جروب</div></div>
+        <div class="tprice ${tone}">${esc(money(x.min_price, x.currency))}<small>←</small></div>
+      </div></button>`;
+  }).join(""));
+  const byId = Object.fromEntries(list.map((x) => [x.teacher_id, x]));
+  document.querySelectorAll("[data-t]").forEach((b) => (b.onclick = () => { S.teacher = byId[b.dataset.t]; go(viewGroups, S.teacher.teacher_id); }));
+}
+
+// ── الحجز: الجروبات ────────────────────────────────────────────────────
+async function viewGroups(teacherId) {
+  chrome({ title: "اختر الجروب", step: 1 });
+  loading();
+  const r = await sb.rpc("booking_groups", { p_teacher: teacherId });
+  if (r.error) return fail(r.error, () => viewGroups(teacherId));
+  const list = r.data || [];
+  chrome({ title: "اختر الجروب", step: 1 });
+  const who = S.teacher ? `<p class="muted" style="margin-top:-6px">مع ${esc(S.teacher.full_name)}</p>` : "";
+  if (!list.length) return mount(who + '<div class="card center"><div class="bigico">🗓️</div><b>مفيش جروبات مفتوحة عند المعلم ده</b></div>');
+  mount(`<h2>اختر الجروب</h2>${who}` + list.map((g) => {
+    const full = g.capacity > 0 && (g.seats_left ?? 1) <= 0;
+    const ic = g.photo_url ? `<img src="${esc(g.photo_url)}" alt="" referrerpolicy="no-referrer" />` : `<div class="g-ic">${esc((g.name || "?").slice(0, 1).toUpperCase())}</div>`;
+    const bits = [g.level, g.schedule].filter(Boolean).map(esc).join(" • ");
+    const seats = g.capacity > 0 ? (full ? "مكتمل" : `فاضل ${g.seats_left} مقعد`) : `${g.members} طالب`;
+    return `<button class="card" data-g="${esc(g.group_id)}" ${full ? "disabled" : ""}>
+      <div class="grp">${ic}
+        <div class="tinfo"><div class="gname">${esc(g.name)}</div>
+          ${bits ? `<div class="muted">${bits}</div>` : ""}
+          <div class="tmeta">${esc(seats)}</div></div>
+        <div class="tprice amber">${esc(money(g.price, g.currency))}<small>${full ? "" : "←"}</small></div>
+      </div></button>`;
+  }).join(""));
+  const byId = Object.fromEntries(list.map((g) => [g.group_id, g]));
+  document.querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => { S.group = byId[b.dataset.g]; go(viewDetails); }));
+  // رابط مباشر لجروب معيّن
+  if (PARAM.group && byId[PARAM.group] && !S._deepUsed) { S._deepUsed = true; S.group = byId[PARAM.group]; go(viewDetails); }
+}
+
+// ── الحجز: البيانات ────────────────────────────────────────────────────
+function viewDetails() {
+  chrome({ title: "بيانات الحجز", step: 2 });
+  const g = S.group, f = S.form || { student: profile?.full_name || "", parent: "", phone: "", note: "" };
+  mount(`
+    <div class="card">
+      <div class="kv"><span>المعلم</span><b>${esc(S.teacher?.full_name || "")}</b></div>
+      <div class="kv"><span>الجروب</span><b>${esc(g.name)}</b></div>
+      ${g.schedule ? `<div class="kv"><span>المواعيد</span><b>${esc(g.schedule)}</b></div>` : ""}
+      <div class="kv"><span>السعر</span><b class="amber">${esc(money(g.price, g.currency))}</b></div>
+    </div>
+    <label>اسم الطالب</label><input id="st" value="${esc(f.student)}" autocomplete="off" />
+    <label>اسم ولي الأمر</label><input id="pn" value="${esc(f.parent)}" autocomplete="off" />
+    <label>رقم ولي الأمر</label><input id="pp" class="ltr" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" value="${esc(f.phone)}" />
+    <label>ملاحظات (اختياري)</label><textarea id="nt">${esc(f.note)}</textarea>
+    <div id="msg"></div>
+    <button class="btn" id="next">متابعة للدفع</button>`);
+  $("pp").oninput = () => { $("pp").value = digits($("pp").value).slice(0, 11); };
+  $("next").onclick = async () => {
+    const form = { student: $("st").value.trim(), parent: $("pn").value.trim(), phone: digits($("pp").value), note: $("nt").value.trim() };
+    S.form = form;
+    if (!form.student) return ($("msg").innerHTML = `<div class="err">${ERR.STUDENT_NAME_REQUIRED}</div>`);
+    if (!form.parent) return ($("msg").innerHTML = `<div class="err">${ERR.PARENT_NAME_REQUIRED}</div>`);
+    if (!PHONE_RE.test(form.phone)) return ($("msg").innerHTML = `<div class="err">${ERR.PARENT_PHONE_INVALID}</div>`);
+    $("next").disabled = true;
+    const r = await sb.rpc("request_group_booking", {
+      p_group_id: g.group_id, p_parent_name: form.parent, p_parent_phone: form.phone,
+      p_student_name: form.student, p_note: form.note || null,
+    });
+    if (r.error) {
+      $("next").disabled = false;
+      if (String(r.error.message).includes("ALREADY_SUBSCRIBED")) return boot(); // يكمّل من حجزه المفتوح
+      return ($("msg").innerHTML = `<div class="err">${esc(errText(r.error))}</div>`);
+    }
+    const d = r.data || {};
+    S.pay = { subscriptionId: d.subscription_id, amount: d.amount, currency: d.currency, kind: "NEW", groupName: d.group_name, teacherName: d.teacher_name };
+    replace(viewPay);
+  };
+}
+
+// ── الدفع (نفس الشاشة للحجز والتجديد) ─────────────────────────────────
+async function viewPay() {
+  const p = S.pay, renewal = p.kind === "RENEWAL";
+  chrome({ title: renewal ? "تجديد الاشتراك" : "الدفع", step: renewal ? null : 3, back: !renewal });
+  loading();
+  const w = await sb.from("manual_payment_accounts").select("brand,phone,holder_name,instructions,is_enabled,sort_order").eq("is_enabled", true).order("sort_order");
+  if (w.error) return fail(w.error, viewPay);
+  const wallets = (w.data || []).filter((x) => (x.phone || "").trim());
+  chrome({ title: renewal ? "تجديد الاشتراك" : "الدفع", step: renewal ? null : 3, back: !renewal });
+  if (!wallets.length) return mount('<div class="card center"><div class="bigico">💳</div><b>مفيش محفظة متاحة للتحويل دلوقتي</b><p class="muted">كلّم الإدارة.</p></div>');
+
+  let sel = wallets[0], file = null, uploaded = null;
+  const draw = () => {
+    mount(`
+      <div class="card amount"><div class="muted">المبلغ المطلوب</div><div class="n">${esc(money(p.amount, p.currency))}</div>
+        <div class="muted">${esc([p.groupName, p.teacherName].filter(Boolean).join(" — "))}</div></div>
+      <div class="note">حوّل المبلغ على إحدى المحافظ دي، وبعدها ارفع صورة التحويل وسجّل الرقم اللي حوّلت منه.</div>
+      <div class="wallets">${wallets.map((x) => `
+        <button class="wallet ${x.brand === sel.brand ? "sel" : ""}" data-b="${esc(x.brand)}">
+          <div class="wi">${esc(brandName(x.brand).slice(0, 1))}</div>
+          <div class="wt"><b>${esc(brandName(x.brand))}</b><span>${x.holder_name ? esc(x.holder_name) : "&nbsp;"}</span></div>
+          <span>${x.brand === sel.brand ? "✓" : ""}</span></button>`).join("")}</div>
+      <div class="numbox"><div class="num">${esc(sel.phone)}</div><button id="cp">نسخ</button></div>
+      ${sel.instructions ? `<p class="muted">${esc(sel.instructions)}</p>` : ""}
+      <label>الرقم اللي حوّلت منه</label>
+      <input id="sp" class="ltr" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" value="${esc(S._sp || "")}" />
+      <label>صورة إثبات التحويل</label>
+      <label class="file ${file ? "has" : ""}" style="margin-top:0">
+        <input id="pf" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" />
+        ${file ? "✓ " + esc(file.name) : "اضغط لرفع صورة التحويل (حتى 5 ميجا)"}</label>
+      <label>ملاحظات (اختياري)</label><textarea id="nt">${esc(S._nt || "")}</textarea>
+      <p class="muted">بعد الإرسال، الإدارة بتراجع التحويل وبتأكد الاشتراك.</p>
+      <div id="msg"></div>
+      <button class="btn" id="send">إرسال إثبات الدفع</button>`);
+    document.querySelectorAll("[data-b]").forEach((b) => (b.onclick = () => { keep(); sel = wallets.find((x) => x.brand === b.dataset.b); draw(); }));
+    $("cp").onclick = async () => { try { await navigator.clipboard.writeText(sel.phone); } catch { const t = document.createElement("textarea"); t.value = sel.phone; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); } $("cp").textContent = "اتنسخ ✓"; };
+    $("sp").oninput = () => { $("sp").value = digits($("sp").value).slice(0, 11); };
+    $("pf").onchange = (e) => { keep(); file = e.target.files[0] || null; uploaded = null; draw(); };
+    $("send").onclick = send;
+  };
+  const keep = () => { S._sp = $("sp")?.value || S._sp; S._nt = $("nt")?.value ?? S._nt; };
+  const send = async () => {
+    keep();
+    const sender = digits(S._sp);
+    const msg = (t) => ($("msg").innerHTML = `<div class="err">${esc(t)}</div>`);
+    if (!PHONE_RE.test(sender)) return msg(ERR.SENDER_PHONE_INVALID);
+    if (!file) return msg(ERR.PROOF_REQUIRED);
+    $("send").disabled = true; $("send").textContent = "جاري الإرسال…";
+    try {
+      if (!uploaded || uploaded.file !== file) {
+        const prepared = await prepImage(file);
+        if (prepared.size > MAX_PROOF_BYTES) throw new Error("الصورة أكبر من 5 ميجا.");
+        const safe = (prepared.name || "proof.jpg").replace(/[^A-Za-z0-9._-]/g, "_").slice(-60) || "proof.jpg";
+        const path = `${user.id}/${Date.now()}-${safe}`;
+        const up = await sb.storage.from(PROOF_BUCKET).upload(path, prepared, { upsert: false, contentType: prepared.type || guessType(prepared.name) });
+        if (up.error) throw up.error;
+        uploaded = { file, path };
+      }
+      const r = await sb.rpc("submit_subscription_payment", {
+        p_subscription_id: p.subscriptionId, p_brand: sel.brand.toUpperCase(),
+        p_sender_phone: sender, p_proof_path: uploaded.path, p_note: (S._nt || "").trim() || null,
+      });
+      if (r.error) throw r.error;
+      replace(viewDone, renewal ? "RENEWAL" : "NEW");
+    } catch (e) {
+      $("send").disabled = false; $("send").textContent = "إرسال إثبات الدفع";
+      msg(e instanceof Error && e.message.includes("5 ميجا") ? e.message : /mime|type|image/i.test(String(e?.message)) ? "ارفع صورة بصيغة JPG أو PNG أو WEBP." : errText(e));
+    }
+  };
+  draw();
+}
+const guessType = (n = "") => (/\.png$/i.test(n) ? "image/png" : /\.webp$/i.test(n) ? "image/webp" : /\.hei[cf]$/i.test(n) ? "image/heic" : "image/jpeg");
+async function prepImage(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size <= 900 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.82));
+    if (blob && blob.size < file.size) return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch { /* الأصلية */ }
+  return file;
+}
+
+// ── تم ─────────────────────────────────────────────────────────────────
+function viewDone(kind) {
+  chrome({ title: kind === "RENEWAL" ? "تجديد الاشتراك" : "تم الحجز", back: false });
+  stack.length = 0;
+  mount(`<div class="card center"><div class="bigico">✅</div>
+    <h2 style="margin-top:0">وصلنا إثبات الدفع</h2>
+    <p class="muted">${kind === "RENEWAL" ? "طلب التجديد" : "حجزك"} دلوقتي عند الإدارة للمراجعة. هيوصلك إشعار في تطبيق 7PRO أول ما يتأكد.</p></div>`);
+}
+function viewInfo({ icon, title, text, action }) {
+  chrome({ title: PARAM.renew ? "تجديد الاشتراك" : "حجز جروب", back: false });
+  mount(`<div class="card center"><div class="bigico">${icon}</div><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p>
+    ${action ? `<button class="btn" id="act">${esc(action.label)}</button>` : ""}</div>`);
+  if (action) $("act").onclick = action.fn;
+}
+function fail(err, retry) {
+  mount(`<div class="card center"><div class="bigico">⚠️</div><p class="muted">${esc(errText(err))}</p><button class="btn ghost" id="rt">حاول تاني</button></div>`);
+  $("rt").onclick = retry;
+}
+
+// ── التجديد ────────────────────────────────────────────────────────────
+async function viewRenew(subId) {
+  chrome({ title: "تجديد الاشتراك", back: false });
+  loading();
+  const r = await sb.from("teacher_subscriptions")
+    .select("id,teacher_id,group_name,student_name,monthly_amount,currency,next_renewal_date,billing_cycle,approval_status,status,student_user_id")
+    .eq("id", subId).maybeSingle();
+  if (r.error) return fail(r.error, () => viewRenew(subId));
+  const sub = r.data;
+  if (!sub || (sub.student_user_id && sub.student_user_id !== user.id)) {
+    return viewInfo({ icon: "🔒", title: "الرابط ده مش تابع للحساب ده",
+      text: `الرابط مخصّص لحساب طالب تاني. أنت داخل بـ ${user.email || "حساب مختلف"} — سجّل خروج وادخل بحساب الطالب صاحب الاشتراك.`,
+      action: { label: "تسجيل خروج", fn: async () => { await sb.auth.signOut(); location.reload(); } } });
+  }
+  const [teacher, last] = await Promise.all([
+    sb.from("profiles").select("full_name").eq("id", sub.teacher_id).maybeSingle().then((x) => x.data?.full_name || "", () => ""),
+    sb.from("subscription_payment_requests").select("status,kind,review_note").eq("subscription_id", subId).order("created_at", { ascending: false }).limit(1).then((x) => x.data?.[0] || null, () => null),
+  ]);
+  const days = Math.round((new Date(sub.next_renewal_date + "T00:00:00") - new Date(new Date().toDateString())) / 86400000);
+  const when = days < 0 ? `متأخر ${-days} يوم` : days === 0 ? "النهاردة" : `بعد ${days} يوم`;
+  chrome({ title: "تجديد الاشتراك", back: false });
+  const summary = `<div class="card">
+      <div class="kv"><span>الطالب</span><b>${esc(sub.student_name)}</b></div>
+      <div class="kv"><span>الجروب</span><b>${esc(sub.group_name)}</b></div>
+      ${teacher ? `<div class="kv"><span>المعلم</span><b>${esc(teacher)}</b></div>` : ""}
+      <div class="kv"><span>ميعاد التجديد</span><b>${esc(fmtDate(sub.next_renewal_date))} (${when})</b></div>
+      <div class="kv"><span>المبلغ</span><b class="amber">${esc(money(sub.monthly_amount, sub.currency))}</b></div></div>`;
+  if (sub.approval_status !== "APPROVED") {
+    return mount(summary + `<div class="err">${ERR.CANNOT_RENEW_PENDING}</div>`);
+  }
+  if (last && last.kind === "RENEWAL" && last.status === "PENDING") {
+    return mount(summary + `<div class="ok">طلب التجديد وإثبات الدفع عند الإدارة للمراجعة. هيوصلك إشعار أول ما يتأكد.</div>`);
+  }
+  const rejected = last && last.kind === "RENEWAL" && last.status === "REJECTED"
+    ? `<div class="err">${esc(last.review_note || "لم نتمكن من تأكيد التحويل. ابعت إثبات الدفع تاني.")}</div>` : "";
+  mount(summary + rejected + `<div id="msg"></div><button class="btn" id="go">تجديد الاشتراك والدفع</button>`);
+  $("go").onclick = async () => {
+    $("go").disabled = true;
+    const rr = await sb.rpc("request_subscription_renewal", { p_subscription_id: subId });
+    if (rr.error) { $("go").disabled = false; return ($("msg").innerHTML = `<div class="err">${esc(errText(rr.error))}</div>`); }
+    S.pay = { subscriptionId: subId, amount: sub.monthly_amount, currency: sub.currency, kind: "RENEWAL", groupName: sub.group_name, teacherName: teacher };
+    go(viewPay);
+  };
+}
+
+// ── الإقلاع ────────────────────────────────────────────────────────────
+async function boot() {
+  stack.length = 0; current = null;
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { user = null; footer(); return viewLogin(); }
+  user = session.user;
+  footer();
+  loading();
+  profile = await sb.from("profiles").select("full_name").eq("id", user.id).maybeSingle().then((x) => x.data, () => null);
+  if (!profile) {
+    // حساب جديد (خصوصًا أول دخول بـ Google): نفس دالة التطبيق اللي بترجّع الملف الشخصي.
+    await sb.rpc("ensure_my_profile").then(() => {}, () => {});
+    profile = await sb.from("profiles").select("full_name").eq("id", user.id).maybeSingle().then((x) => x.data, () => null);
+  }
+
+  if (PARAM.renew) return replace(viewRenew, PARAM.renew);
+
+  // حجز مفتوح لسه ما اتدفعش؟ يكمّل منه بدل ما يبدأ من الأول.
+  const st = await sb.rpc("my_subscription_state").then((x) => x.data || {}, () => ({}));
+  switch (st.state) {
+    case "AWAITING_PAYMENT":
+      S.pay = { subscriptionId: st.subscription_id, amount: st.amount, currency: st.currency, kind: "NEW", groupName: st.group_name, teacherName: st.teacher_name };
+      return viewInfo({ icon: "🕒", title: "عندك حجز مستني الدفع",
+        text: `${st.group_name} مع ${st.teacher_name} — ${money(st.amount, st.currency)}`,
+        action: { label: "كمّل الدفع", fn: () => replace(viewPay) } });
+    case "PENDING_REVIEW":
+      return viewInfo({ icon: "⏳", title: "حجزك قيد المراجعة", text: "الإدارة بتراجع إثبات الدفع. هيوصلك إشعار في التطبيق أول ما يتأكد." });
+    case "RENEWAL_DUE": case "RENEWAL_AWAITING_PAYMENT":
+      return viewInfo({ icon: "🔔", title: "اشتراكك محتاج تجديد", text: `${st.group_name} — ${money(st.amount, st.currency)}`,
+        action: { label: "جدّد الاشتراك", fn: () => { PARAM.renew = st.subscription_id; boot(); } } });
+    case "RENEWAL_PENDING_REVIEW":
+      return viewInfo({ icon: "⏳", title: "طلب التجديد قيد المراجعة", text: "هيوصلك إشعار أول ما يتأكد." });
+    case "ACTIVE":
+      return viewInfo({ icon: "✅", title: "أنت مشترك بالفعل", text: `${st.group_name} مع ${st.teacher_name}. ميعاد التجديد ${fmtDate(st.next_renewal_date)}.` });
+  }
+  if (PARAM.teacher) {
+    const t = await sb.rpc("booking_teachers").then((x) => (x.data || []).find((y) => y.teacher_id === PARAM.teacher), () => null);
+    if (t) S.teacher = t;
+    return replace(viewGroups, PARAM.teacher);
+  }
+  replace(viewTeachers);
+}
+
+sb.auth.onAuthStateChange((ev) => { if (ev === "SIGNED_OUT") { user = null; } });
+boot();
+</script>
+</body>
+</html>

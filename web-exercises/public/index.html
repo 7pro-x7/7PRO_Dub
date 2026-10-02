@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#15110e" />
+<meta name="robots" content="noindex" />
+<title>7PRO — تمارين المعلم</title>
+<!--
+  7PRO — تمارين المعلم على الويب، للطلاب المشتركين مع المعلم فقط.
+
+  الرابط:
+    /?teacher=<teacher_id>                → كل تمارين المعلم
+    /?teacher=<teacher_id>&ex=<test_id>   → تمرين معيّن مباشرة
+  المعلم بينسخ الرابط من استوديو المعلم في التطبيق ويبعته لطلابه.
+
+  الحماية على السيرفر (مش في الصفحة بس):
+    web_teacher_exercises / web_start_exercise بيرفضوا بـ NOT_SUBSCRIBED أي حساب مالوش اشتراك
+    معتمد (APPROVED وغير متوقف) مع المعلم ده. المعلم نفسه وفريق الإدارة بيفتحوا عادي.
+  بعد كده التصحيح كله بنفس دوال التطبيق: next_test_question / submit_test_answer / finish_test_attempt.
+
+  الإعلانات: من لوحة المالك/الأدمن (إعلانات الويب) ← الدالة web_ads. أنواعها: صورة + رابط، AdSense،
+  أو كود HTML بيتعرض جوه iframe معزول (مايقدرش يوصل لجلسة الطالب).
+
+  صفحة واحدة، من غير build.
+-->
+<style>
+:root{
+  --bg:#15110e; --bg2:#0e0f14; --card:#17171f; --line:rgba(255,255,255,.09);
+  --text:#f6f3ee; --muted:#9d9aa1; --amber:#e79a4a; --amber2:#f0ad63; --amber-soft:rgba(231,154,74,.14);
+  --teal:#2fbf9b; --red:#ef6b73; --ok:#39c98a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%}
+body{background:linear-gradient(180deg,var(--bg) 0,var(--bg2) 55%,#0b0c10 100%) fixed;color:var(--text);
+  font-family:"Segoe UI",Tahoma,system-ui,-apple-system,"Noto Sans Arabic",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.shell{max-width:560px;margin:0 auto;padding:16px 18px 44px}
+header{display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+header h1{font-size:21px;margin:0;font-weight:800;flex:1;line-height:1.4}
+.iconbtn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-size:20px;cursor:pointer;display:grid;place-items:center}
+.iconbtn[hidden]{display:none}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:26px;padding:16px 18px;margin-bottom:14px}
+.muted{color:var(--muted);line-height:1.8;font-size:15px}
+.trow{display:flex;align-items:center;gap:14px}
+.avatar{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#1d1d27;flex:none;display:grid;place-items:center;font-size:24px;font-weight:800;color:var(--amber)}
+.tinfo{flex:1;min-width:0}
+.tname{font-size:19px;font-weight:800;line-height:1.5}
+.band{color:var(--amber);font-size:14px;font-weight:700}
+.sec{display:flex;align-items:center;justify-content:space-between;margin:20px 4px 12px}
+.sec h3{margin:0;font-size:20px;font-weight:800}
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:700;padding:6px 14px;border-radius:999px;background:var(--amber-soft);color:var(--amber)}
+.ex{border-color:rgba(231,154,74,.32)}
+.ex.locked{opacity:.55;border-color:var(--line)}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 14px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:12px;background:var(--amber-soft);color:var(--amber);font-size:14px;font-weight:700}
+.chip.g{background:rgba(47,191,155,.13);color:var(--teal)}
+.btn{width:100%;padding:15px;border:0;border-radius:17px;font:inherit;font-weight:800;font-size:17px;cursor:pointer;background:linear-gradient(180deg,var(--amber2),var(--amber));color:#1b1208}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--line);font-weight:700}
+.btn.google{background:#fff;color:#222;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn.google svg{width:20px;height:20px;flex:none}
+.btn+.btn{margin-top:10px}
+.lockrow{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;background:rgba(255,255,255,.04);border-radius:14px;padding:11px 14px}
+.prog{height:10px;border-radius:99px;background:#26262f;overflow:hidden;margin:6px 0 10px}
+.prog b{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--amber),var(--amber2));transition:width .4s}
+.meta{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
+.timer{font-weight:800;color:var(--amber);direction:ltr}
+.timer.urgent{color:var(--red);animation:pl .7s infinite alternate}
+@keyframes pl{to{opacity:.45}}
+.qtag{display:inline-block;font-size:13px;font-weight:700;color:var(--amber);background:var(--amber-soft);border-radius:999px;padding:5px 12px;margin-bottom:12px}
+.qprompt{font-size:21px;font-weight:700;line-height:1.7;margin:0 0 14px;white-space:pre-wrap;unicode-bidi:plaintext}
+.qimg{max-width:100%;border-radius:16px;margin:0 0 14px;display:block}
+audio,video{width:100%;margin:0 0 14px;border-radius:12px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:inherit;font:inherit;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:10px;cursor:pointer;font-size:18px;unicode-bidi:plaintext}
+.opt .k{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--muted);flex:none;display:grid;place-items:center;font-size:13px;color:var(--muted)}
+.opt.multi .k{border-radius:8px}
+.opt.sel{border-color:var(--amber);background:var(--amber-soft)}
+.opt.sel .k{background:var(--amber);border-color:var(--amber);color:#1b1208}
+.opt.right{border-color:var(--ok);background:rgba(57,201,138,.12)}
+.opt.wrong{border-color:var(--red);background:rgba(239,107,115,.12)}
+.opt:disabled{cursor:default}
+input,textarea{width:100%;font:inherit;font-size:17px;color:var(--text);background:#111118;border:1.5px solid var(--line);border-radius:15px;padding:13px 15px;outline:none}
+input:focus{border-color:rgba(231,154,74,.7)}
+input.ltr{direction:ltr;text-align:right}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+.fb{border-radius:16px;padding:12px 14px;margin:6px 0 14px;font-size:16px;line-height:1.7}
+.fb.ok{background:rgba(57,201,138,.1);border:1px solid rgba(57,201,138,.3);color:#7ee0b4}
+.fb.no{background:rgba(239,107,115,.1);border:1px solid rgba(239,107,115,.3);color:#ff9aa0}
+.err{background:rgba(239,107,115,.12);border:1px solid rgba(239,107,115,.35);color:#ff9aa0;padding:12px 14px;border-radius:14px;margin:12px 0;font-size:15px;line-height:1.7}
+.ok2{background:rgba(57,201,138,.1);border:1px solid rgba(57,201,138,.3);color:#7ee0b4;padding:12px 14px;border-radius:14px;margin:12px 0;font-size:15px;line-height:1.7}
+.center{text-align:center;padding:24px 6px}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--amber);animation:sp .8s linear infinite;margin:70px auto 14px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.big{font-size:60px;font-weight:800;color:var(--amber);line-height:1;margin:6px 0}
+.skill{margin:14px 0}
+.skill .h{display:flex;justify-content:space-between;font-size:15px;margin-bottom:6px}
+.stack{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.tagg{font-size:13px;font-weight:700;padding:6px 12px;border-radius:999px}
+.tagg.s{background:rgba(47,191,155,.13);color:var(--teal)}
+.tagg.w{background:rgba(239,107,115,.12);color:#ff9aa0}
+.tabs{display:flex;gap:6px;background:#111118;border:1px solid var(--line);border-radius:14px;padding:4px;margin-bottom:6px}
+.tabs button{flex:1;border:0;border-radius:11px;padding:10px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;background:transparent;color:var(--muted)}
+.tabs button.on{background:var(--amber-soft);color:var(--amber)}
+.sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;margin:14px 0 0}
+.sep:before,.sep:after{content:"";flex:1;height:1px;background:var(--line)}
+.linkbtn{background:none;border:0;color:var(--amber);font:inherit;font-size:13px;cursor:pointer;padding:6px 0;text-decoration:underline}
+.ad{margin:0 0 14px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid var(--line)}
+.ad small{display:block;font-size:11px;color:var(--muted);padding:5px 10px 0}
+.ad img{display:block;width:100%;height:auto;object-fit:contain}
+.ad iframe{display:block;width:100%;border:0;background:#fff}
+.foot{margin-top:24px;text-align:center;color:var(--muted);font-size:12.5px}
+.foot a{color:var(--amber);cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <button class="iconbtn" id="back" hidden aria-label="رجوع">→</button>
+    <h1 id="title">تمارين المعلم</h1>
+  </header>
+  <main id="view"><div class="spinner"></div></main>
+  <div class="foot" id="foot"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// نفس مشروع Supabase اللي التطبيق بيشاور عليه (المفتاح ده publishable وآمن يبقى في الصفحة).
+const SUPABASE_URL = "https://usbfrqbjtpvnkmmcusdi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_z4-FFrrgruER4BwM10qV_A_C0dcN6CW";
+// صفحة حجز الجروبات (بتظهر لغير المشتركين). غيّره لو الرابط اتغيّر.
+const BOOKING_URL = "https://7pro-pay.7pro7777.workers.dev/";
+const AD_PAGE = "EXERCISES";
+
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+
+const qs = new URLSearchParams(location.search);
+const PARAM = { teacher: qs.get("teacher"), ex: qs.get("ex") };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const digits = (s) => String(s ?? "").replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/\D/g, "");
+const PHONE_RE = /^01[0125][0-9]{8}$/;
+const SKILLS = { GRAMMAR: "القواعد", VOCABULARY: "المفردات", READING: "القراءة", LISTENING: "الاستماع", WRITING: "الكتابة", SPEAKING: "المحادثة" };
+const skillName = (k) => SKILLS[String(k).toUpperCase()] || k;
+
+const ERR = {
+  NOT_SUBSCRIBED: "التمارين دي لطلاب المعلم المشتركين معاه فقط.",
+  TEST_NOT_AVAILABLE: "التمرين ده مش متاح دلوقتي.",
+  TEST_HAS_NO_QUESTIONS: "التمرين ده لسه مفيهوش أسئلة.",
+  TEST_LOCKED: "المعلم قافل التمرين ده دلوقتي.",
+  ATTEMPT_LIMIT_REACHED: "وصلت للحد الأقصى من المحاولات لهذا التمرين.",
+  ACCOUNT_NOT_ACTIVE: "حسابك مش مفعّل. كلّم الإدارة.",
+  ATTEMPT_NOT_FOUND: "المحاولة دي مش موجودة. ابدأ التمرين من جديد.",
+  ATTEMPT_CLOSED: "التمرين خلص.",
+  UNAUTHORIZED: "سجّل الدخول الأول.",
+};
+function errText(e) {
+  const m = String((e && (e.message || e.error_description || e.error)) || e || "");
+  for (const k in ERR) if (m.includes(k)) return ERR[k];
+  if (/Invalid login/i.test(m)) return "الإيميل أو كلمة السر غلط.";
+  if (/already registered|already been registered/i.test(m)) return "الإيميل ده عنده حساب بالفعل. ادخل بكلمة السر بتاعته.";
+  return "حصلت مشكلة، جرّب تاني.";
+}
+
+// ── الإعلانات ──────────────────────────────────────────────────────────
+let ADS = {};
+async function loadAds() {
+  try {
+    const r = await sb.rpc("web_ads", { p_page: AD_PAGE });
+    ADS = {};
+    for (const a of (r.data || [])) ADS[a.slot] = a;
+  } catch { ADS = {}; }
+}
+const safeUrl = (u) => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : null; } catch { return null; } };
+/** مكان الإعلان في الصفحة: div فاضي بيتملي بعد الرسم عن طريق hydrateAds(). */
+const adSlot = (slot) => (ADS[slot] ? `<div class="ad" data-ad="${slot}"></div>` : "");
+let adsenseLoaded = null;
+function loadAdsense(client) {
+  if (adsenseLoaded === client) return;
+  adsenseLoaded = client;
+  const s = document.createElement("script");
+  s.async = true; s.crossOrigin = "anonymous";
+  s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + encodeURIComponent(client);
+  document.head.appendChild(s);
+}
+function hydrateAds() {
+  document.querySelectorAll("[data-ad]").forEach((el) => {
+    const a = ADS[el.dataset.ad];
+    if (!a || el.dataset.done) return;
+    el.dataset.done = "1";
+    const h = Math.max(40, Math.min(700, Number(a.height_px) || 120));
+    if (a.kind === "IMAGE") {
+      const img = safeUrl(a.image_url), link = safeUrl(a.link_url);
+      if (!img || !img.startsWith("https:")) return el.remove();
+      const im = `<img src="${esc(img)}" alt="${esc(a.title || "إعلان")}" loading="lazy" style="max-height:${h * 3}px" />`;
+      el.innerHTML = `<small>إعلان</small>` + (link ? `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer sponsored">${im}</a>` : im);
+    } else if (a.kind === "ADSENSE") {
+      if (!/^ca-pub-\d{6,20}$/.test(a.adsense_client || "") || !/^\d{4,20}$/.test(a.adsense_slot || "")) return el.remove();
+      loadAdsense(a.adsense_client);
+      el.innerHTML = `<small>إعلان</small><ins class="adsbygoogle" style="display:block;min-height:${h}px" data-ad-client="${esc(a.adsense_client)}" data-ad-slot="${esc(a.adsense_slot)}" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+      try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch { /* ignore */ }
+    } else if (a.kind === "HTML" && a.html_code) {
+      // iframe معزول: من غير allow-same-origin، فالكود مايقدرش يقرا جلسة الطالب أو يكلم Supabase بيها.
+      el.innerHTML = `<small>إعلان</small><iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" loading="lazy" style="height:${h}px" srcdoc="${esc(a.html_code)}"></iframe>`;
+    } else el.remove();
+  });
+}
+const mount = (html) => { $("view").innerHTML = html; window.scrollTo({ top: 0 }); hydrateAds(); };
+
+// ── الجلسة والتنقل ─────────────────────────────────────────────────────
+let user = null, profile = null;
+let backFn = null;
+function chrome(title, back) {
+  $("title").textContent = title;
+  backFn = back || null;
+  $("back").hidden = !backFn;
+}
+$("back").onclick = () => backFn && backFn();
+const loading = (t = "") => { $("view").innerHTML = `<div class="spinner"></div>${t ? `<p class="muted" style="text-align:center">${esc(t)}</p>` : ""}`; };
+function fail(err, retry) {
+  mount(`<div class="card center"><div style="font-size:46px">⚠️</div><p class="muted">${esc(errText(err))}</p><button class="btn ghost" id="rt">حاول تاني</button></div>`);
+  $("rt").onclick = retry;
+}
+function footer() {
+  $("foot").innerHTML = user && !user.is_anonymous
+    ? `داخل بحساب ${esc(user.email || "")} — <a id="signout">تسجيل خروج</a>` : "";
+  const so = $("signout");
+  if (so) so.onclick = async () => { await sb.auth.signOut(); location.reload(); };
+}
+
+// ── تسجيل الدخول / إنشاء حساب ─────────────────────────────────────────
+const GOOGLE_G = `<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>`;
+
+function viewLogin(mode = "in") {
+  chrome("تمارين المعلم", null);
+  const up = mode === "up";
+  mount(`
+    <div class="card">
+      <p class="muted" style="margin-top:0">سجّل الدخول بحسابك في 7PRO. التمارين لطلاب المعلم المشتركين معاه.</p>
+      <button class="btn google" id="google">${GOOGLE_G}<span>الدخول بحساب Google</span></button>
+      <div class="sep">أو بالإيميل</div>
+      <div class="tabs" style="margin-top:14px">
+        <button id="tIn" class="${up ? "" : "on"}">تسجيل الدخول</button>
+        <button id="tUp" class="${up ? "on" : ""}">إنشاء حساب</button>
+      </div>
+      ${up ? `<label>الاسم بالكامل</label><input id="nm" autocomplete="name" />` : ""}
+      <label>الإيميل</label><input id="em" class="ltr" type="email" autocomplete="email" inputmode="email" />
+      <label>كلمة السر</label><input id="pw" class="ltr" type="password" autocomplete="${up ? "new-password" : "current-password"}" placeholder="${up ? "6 حروف أو أكتر" : ""}" />
+      ${up ? `<label>رقم الموبايل (اختياري)</label><input id="ph" class="ltr" inputmode="numeric" maxlength="11" placeholder="01xxxxxxxxx" />` : ""}
+      <div id="msg"></div>
+      <button class="btn" id="login" style="margin-top:16px">${up ? "إنشاء الحساب والمتابعة" : "دخول"}</button>
+      ${up ? "" : `<div style="text-align:center;margin-top:6px"><button class="linkbtn" id="forgot">نسيت كلمة السر؟</button></div>`}
+    </div>
+    <p class="muted" style="text-align:center;font-size:13px">لو المعلم ضافك بإيميل معيّن، ادخل بنفس الإيميل علشان الاشتراك يظهر.</p>`);
+
+  const msg = (t, ok) => ($("msg").innerHTML = `<div class="${ok ? "ok2" : "err"}">${esc(t)}</div>`);
+  $("tIn").onclick = () => viewLogin("in");
+  $("tUp").onclick = () => viewLogin("up");
+  if (up) $("ph").oninput = () => { $("ph").value = digits($("ph").value).slice(0, 11); };
+
+  $("google").onclick = async () => {
+    $("google").disabled = true;
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } });
+    if (error) { $("google").disabled = false; msg(errText(error)); }
+  };
+  const submit = async () => {
+    const email = $("em").value.trim(), password = $("pw").value;
+    if (up) {
+      const name = $("nm").value.trim(), phone = digits($("ph").value);
+      if (!name) return msg("اكتب اسمك.");
+      if (!email) return msg("اكتب الإيميل.");
+      if (password.length < 6) return msg("كلمة السر لازم تكون 6 حروف أو أكتر.");
+      if (phone && !PHONE_RE.test(phone)) return msg("رقم الموبايل لازم يكون مصري صحيح (01xxxxxxxxx) أو سيبه فاضي.");
+      $("login").disabled = true;
+      const data = { full_name: name }; if (phone) data.phone = phone;
+      const { data: res, error } = await sb.auth.signUp({ email, password, options: { data } });
+      if (error) { $("login").disabled = false; return msg(errText(error)); }
+      if (!res.session) {
+        const li = await sb.auth.signInWithPassword({ email, password });
+        if (li.error) {
+          $("login").disabled = false;
+          if (res.user && Array.isArray(res.user.identities) && res.user.identities.length === 0) { viewLogin("in"); return setTimeout(() => msg("الإيميل ده عنده حساب بالفعل. ادخل بكلمة السر بتاعته."), 0); }
+          return msg("تعذّر إنشاء الحساب. جرّب تاني أو ادخل بـ Google.");
+        }
+      }
+      return boot();
+    }
+    if (!email || !password) return msg("اكتب الإيميل وكلمة السر.");
+    $("login").disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { $("login").disabled = false; return msg(errText(error)); }
+    boot();
+  };
+  $("login").onclick = submit;
+  $("pw").onkeydown = (e) => { if (e.key === "Enter") submit(); };
+  if (!up) $("forgot").onclick = async () => {
+    const email = $("em").value.trim();
+    if (!email) return msg("اكتب الإيميل الأول وبعدين اضغط «نسيت كلمة السر».");
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname + location.search });
+    if (error) return msg(errText(error));
+    msg("بعتنا رابط إعادة تعيين كلمة السر على إيميلك.", true);
+  };
+}
+
+// ── الرابط ناقص / مش مشترك ─────────────────────────────────────────────
+function viewNoLink() {
+  chrome("تمارين المعلم", null);
+  mount(`<div class="card center"><div style="font-size:46px">🔗</div><h3 style="margin:0 0 8px">الرابط ناقص</h3><p class="muted">اطلب من معلمك رابط التمارين تاني.</p></div>`);
+}
+async function viewNotSubscribed() {
+  chrome("تمارين المعلم", null);
+  const t = await sb.from("profiles").select("full_name").eq("id", PARAM.teacher).maybeSingle().then((x) => x.data, () => null);
+  const who = t?.full_name ? `المعلم ${esc(t.full_name)}` : "المعلم";
+  mount(`<div class="card center">
+    <div style="font-size:46px">🔒</div>
+    <h3 style="margin:0 0 8px">التمارين دي لطلاب ${who} المشتركين معاه</h3>
+    <p class="muted">أنت داخل بحساب <b>${esc(user.email || "بدون إيميل")}</b> وهو مش مشترك مع المعلم ده. لو مشترك بحساب تاني أو بإيميل مختلف، سجّل خروج وادخل بيه.</p>
+    <a href="${esc(BOOKING_URL)}?teacher=${esc(PARAM.teacher)}" style="text-decoration:none"><button class="btn">احجز جروب مع المعلم ←</button></a>
+    <button class="btn ghost" id="so">تسجيل خروج</button></div>`);
+  $("so").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+}
+
+// ── قائمة التمارين ─────────────────────────────────────────────────────
+let DATA = null;
+async function viewList() {
+  loading();
+  const r = await sb.rpc("web_teacher_exercises", { p_teacher: PARAM.teacher });
+  if (r.error) return /NOT_SUBSCRIBED/.test(r.error.message) ? viewNotSubscribed() : fail(r.error, viewList);
+  DATA = r.data;
+  drawList();
+  if (PARAM.ex && !drawList.deepDone) {
+    drawList.deepDone = true;
+    const ex = (DATA.exercises || []).find((x) => x.id === PARAM.ex);
+    if (ex && !ex.is_locked) viewIntro(ex);
+  }
+}
+function drawList() {
+  const { teacher, sections, exercises, best } = DATA;
+  chrome(teacher.full_name ? `تمارين ${teacher.full_name}` : "تمارين المعلم", null);
+  const av = teacher.avatar_url ? `<img class="avatar" src="${esc(teacher.avatar_url)}" alt="" referrerpolicy="no-referrer" />` : `<div class="avatar">${esc((teacher.full_name || "؟").slice(0, 1))}</div>`;
+  const groups = (sections || []).map((s) => ({ title: s.title, list: exercises.filter((e) => e.section_id === s.id) }));
+  const loose = exercises.filter((e) => !e.section_id || !(sections || []).some((s) => s.id === e.section_id));
+  if (loose.length) groups.push({ title: groups.length ? "تمارين عامة" : null, list: loose });
+  const shown = groups.filter((g) => g.list.length);
+
+  mount(`
+    ${adSlot("TOP")}
+    <div class="card"><div class="trow">${av}<div class="tinfo"><div class="band">تمارين تعليمية</div><div class="tname">${esc(teacher.full_name || "")}</div></div><span class="pill">${exercises.length} تمرين</span></div></div>
+    ${shown.length ? shown.map((g) => `${g.title ? `<div class="sec"><h3>${esc(g.title)}</h3><span class="pill">${g.list.length}</span></div>` : ""}${g.list.map((e) => exCard(e, best[e.id])).join("")}`).join("")
+      : '<div class="card center"><div style="font-size:46px">📝</div><b>مفيش تمارين منشورة دلوقتي</b><p class="muted">المعلم لسه ما نشرش تمارين.</p></div>'}
+    ${adSlot("BOTTOM")}`);
+  document.querySelectorAll("[data-ex]").forEach((b) => (b.onclick = () => viewIntro(exercises.find((x) => x.id === b.dataset.ex))));
+  footer();
+}
+function exCard(e, bestPct) {
+  const has = bestPct != null, passed = has && Number(bestPct) >= Number(e.passing_score);
+  const mins = Math.max(1, Math.round(Number(e.time_limit_seconds) / 60));
+  const label = passed ? "أعد التمرين" : has ? "حاول مرة تانية" : "ابدأ التمرين";
+  return `<div class="card ex ${e.is_locked ? "locked" : ""}">
+    <div class="tname">${esc(e.title_ar || e.title)}</div>
+    ${e.description_ar || e.description ? `<p class="muted" style="margin:6px 0 0">${esc(e.description_ar || e.description)}</p>` : ""}
+    <div class="chips">
+      <span class="chip">؟ ${e.question_count} سؤال</span><span class="chip">⏱ ${mins} دقيقة</span>
+      ${has ? `<span class="chip g">${passed ? "✓ " : ""}أفضل نتيجة ${Math.round(bestPct)}%</span>` : ""}
+    </div>
+    ${e.is_locked ? `<div class="lockrow">🔒 المعلم قافل التمرين ده دلوقتي</div>` : `<button class="btn" data-ex="${esc(e.id)}">${label} ←</button>`}
+  </div>`;
+}
+
+// ── قبل البداية ────────────────────────────────────────────────────────
+function viewIntro(e) {
+  chrome(e.title_ar || e.title, () => drawList());
+  const mins = Math.max(1, Math.round(Number(e.time_limit_seconds) / 60));
+  mount(`<div class="card">
+    <div class="tname" style="margin-bottom:8px">${esc(e.title_ar || e.title)}</div>
+    <p class="muted" style="margin:0">${e.question_count} سؤال خلال ${mins} دقيقة. الوقت بيبدأ أول ما تضغط «ابدأ»، ومينفعش ترجع لسؤال فات. درجة النجاح ${Math.round(Number(e.passing_score))}%.</p>
+    <div id="msg"></div>
+    <button class="btn" id="go" style="margin-top:18px">ابدأ التمرين ←</button></div>`);
+  $("go").onclick = () => { $("go").disabled = true; runExercise(e); };
+}
+
+// ── تشغيل التمرين ──────────────────────────────────────────────────────
+let RUN = null;
+async function runExercise(e) {
+  chrome(e.title_ar || e.title, null);
+  loading("جاري تجهيز التمرين…");
+  const s = await sb.rpc("web_start_exercise", { p_test_id: e.id });
+  if (s.error) {
+    if (/NOT_SUBSCRIBED/.test(s.error.message)) return viewNotSubscribed();
+    return mount(`<div class="card center"><div style="font-size:46px">⚠️</div><p class="muted">${esc(errText(s.error))}</p><button class="btn ghost" id="bk">رجوع للتمارين</button></div>`) || ($("bk").onclick = () => drawList());
+  }
+  RUN = { ex: e, attemptId: s.data.attempt_id, deadline: Date.now() + (Number(s.data.seconds_left ?? s.data.time_limit_seconds) || 0) * 1000, tick: null };
+  nextQuestion();
+}
+async function nextQuestion() {
+  loading();
+  const r = await sb.rpc("next_test_question", { p_attempt_id: RUN.attemptId });
+  if (r.error) return fail(r.error, nextQuestion);
+  const d = r.data || {};
+  if (d.done) return finish(d.reason === "TIME_UP");
+  if (d.seconds_left != null) RUN.deadline = Date.now() + Number(d.seconds_left) * 1000;
+  drawQuestion(d);
+}
+const fmt = (sec) => { sec = Math.max(0, sec); return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; };
+function drawQuestion(d) {
+  const q = d.question, kind = q.kind;
+  let options = Array.isArray(q.options) ? q.options.map(String) : [];
+  if (!options.length && kind === "TRUE_FALSE") options = ["صح", "خطأ"];
+  const answerable = kind === "TEXT" || options.length > 0;
+  const multi = kind === "MULTI";
+  let picked = [], locked = false;
+
+  mount(`
+    <div class="card">
+      <div class="meta"><span>سؤال ${d.index} من ${d.total}</span><span class="timer" id="tm">--:--</span></div>
+      <div class="prog"><b style="width:${Math.max(0, ((d.index - 1) / Math.max(1, d.total)) * 100)}%"></b></div>
+    </div>
+    <div class="card">
+      <span class="qtag">${esc(skillName(q.skill))}${multi ? " • اختار أكتر من إجابة" : ""}</span>
+      ${q.image_url ? `<img class="qimg" src="${esc(q.image_url)}" alt="" />` : ""}
+      ${q.audio_url ? `<audio controls src="${esc(q.audio_url)}"></audio>` : ""}
+      ${q.video_url ? `<video controls playsinline src="${esc(q.video_url)}"></video>` : ""}
+      <p class="qprompt">${esc(q.prompt)}</p>
+      ${kind === "TEXT"
+        ? `<input id="tx" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="اكتب إجابتك" style="direction:ltr;text-align:left" />`
+        : options.map((o, i) => `<button class="opt ${multi ? "multi" : ""}" data-i="${i}"><span class="k">${multi ? "" : String.fromCharCode(65 + i)}</span><span>${esc(o)}</span></button>`).join("")}
+      <div id="fb"></div>
+      <button class="btn" id="act" ${answerable ? "disabled" : ""}>${answerable ? "تأكيد الإجابة" : "تخطي السؤال"}</button>
+    </div>
+    ${adSlot("QUESTION")}`);
+
+  const act = $("act");
+  const sync = () => { act.disabled = kind === "TEXT" ? !$("tx").value.trim() : picked.length === 0; };
+  if (kind === "TEXT") $("tx").oninput = sync;
+  document.querySelectorAll(".opt").forEach((b) => (b.onclick = () => {
+    if (locked) return;
+    const i = Number(b.dataset.i);
+    picked = multi ? (picked.includes(i) ? picked.filter((x) => x !== i) : [...picked, i]) : [i];
+    document.querySelectorAll(".opt").forEach((x) => x.classList.toggle("sel", picked.includes(Number(x.dataset.i))));
+    sync();
+  }));
+
+  clearInterval(RUN.tick);
+  const paint = () => {
+    const left = Math.round((RUN.deadline - Date.now()) / 1000);
+    const el = $("tm"); if (!el) return clearInterval(RUN.tick);
+    el.textContent = fmt(left); el.classList.toggle("urgent", left <= 30);
+    if (left <= 0) { clearInterval(RUN.tick); finish(true); }
+  };
+  paint(); RUN.tick = setInterval(paint, 1000);
+
+  act.onclick = async () => {
+    if (locked) return nextQuestion();
+    act.disabled = true;
+    const isSkip = !answerable;
+    const res = await sb.rpc("submit_test_answer", {
+      p_attempt_id: RUN.attemptId, p_question_id: q.id,
+      p_selected: isSkip || kind === "TEXT" ? [] : [...picked].sort((a, b) => a - b),
+      p_text: kind === "TEXT" ? $("tx").value : null, p_order: null, p_match: {},
+    });
+    if (res.error) {
+      act.disabled = false;
+      if (/ATTEMPT_CLOSED/.test(res.error.message)) return finish(true);
+      $("fb").innerHTML = `<div class="err">${esc(errText(res.error))}</div>`;
+      return;
+    }
+    if (isSkip) return nextQuestion();
+    const a = res.data || {};
+    locked = true;
+    if (kind === "TEXT") $("tx").disabled = true;
+    document.querySelectorAll(".opt").forEach((x) => { x.disabled = true; if (picked.includes(Number(x.dataset.i))) x.classList.add(a.correct ? "right" : "wrong"); });
+    $("fb").innerHTML = a.graded === false ? `<div class="fb ok">اتسجّلت إجابتك.</div>`
+      : `<div class="fb ${a.correct ? "ok" : "no"}">${a.correct ? "إجابة صحيحة ✓" : "إجابة غلط"}${a.explanation ? `<div style="margin-top:6px;color:var(--text)">${esc(a.explanation)}</div>` : ""}</div>`;
+    act.disabled = false;
+    act.textContent = d.index >= d.total ? "شوف النتيجة" : "السؤال التالي ←";
+  };
+}
+
+// ── النتيجة ────────────────────────────────────────────────────────────
+async function finish(timedOut) {
+  clearInterval(RUN?.tick);
+  chrome("نتيجتك", null);
+  loading(timedOut ? "انتهى الوقت، بنحسب نتيجتك…" : "بنحسب نتيجتك…");
+  const r = await sb.rpc("finish_test_attempt", { p_attempt_id: RUN.attemptId });
+  if (r.error) return fail(r.error, () => finish(timedOut));
+  viewResult(r.data);
+}
+async function viewResult(r) {
+  chrome("نتيجتك", null);
+  if (r.status === "ABANDONED" || !r.answered) {
+    mount(`<div class="card center"><div style="font-size:46px">🕘</div><h3 style="margin:0 0 8px">مفيش إجابات اتسجّلت</h3><p class="muted">ابدأ التمرين تاني وجاوب على الأسئلة.</p><button class="btn" id="home">رجوع للتمارين</button></div>`);
+    return ($("home").onclick = viewList);
+  }
+  const skills = r.skills || {};
+  const sk = Object.keys(skills).map((k) => `<div class="skill"><div class="h"><span>${esc(skillName(k))}</span><b>${Math.round(skills[k])}%</b></div><div class="prog"><b style="width:${Math.round(skills[k])}%"></b></div></div>`).join("");
+  const tags = (arr, c) => (arr || []).map((k) => `<span class="tagg ${c}">${esc(skillName(k))}</span>`).join("");
+  mount(`
+    <div class="card center">
+      <div class="muted">${esc(RUN.ex.title_ar || RUN.ex.title)}</div>
+      <div class="big">${Math.round(r.percent)}%</div>
+      <div class="muted">${r.passed ? "عديت التمرين ✓ ممتاز" : `لسه محتاج شوية تدريب (النجاح ${Math.round(Number(RUN.ex.passing_score))}%)`}</div>
+      ${r.better_than_percent != null ? `<div class="muted" style="margin-top:8px">أحسن من ${Math.round(r.better_than_percent)}% ممن حلّوا التمرين</div>` : ""}
+    </div>
+    ${adSlot("RESULT")}
+    ${sk ? `<div class="card"><h3 style="margin:0 0 6px">مهاراتك</h3>${sk}
+      ${(r.strengths || []).length ? `<div class="muted" style="margin-top:12px">نقاط القوة</div><div class="stack">${tags(r.strengths, "s")}</div>` : ""}
+      ${(r.weaknesses || []).length ? `<div class="muted" style="margin-top:12px">محتاجة تركيز</div><div class="stack">${tags(r.weaknesses, "w")}</div>` : ""}</div>` : ""}
+    <button class="btn" id="home">رجوع للتمارين</button>
+    ${adSlot("BOTTOM")}`);
+  $("home").onclick = viewList;
+}
+
+// ── الإقلاع ────────────────────────────────────────────────────────────
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session || session.user.is_anonymous) { user = null; footer(); return viewLogin(); }
+  user = session.user;
+  if (!PARAM.teacher || !UUID_RE.test(PARAM.teacher)) return viewNoLink();
+  loading();
+  await Promise.all([
+    loadAds(),
+    sb.from("profiles").select("full_name").eq("id", user.id).maybeSingle().then((x) => x.data, () => null).then(async (p) => {
+      if (!p) await sb.rpc("ensure_my_profile").then(() => {}, () => {});
+      profile = p;
+    }),
+  ]);
+  footer();
+  viewList();
+}
+boot();
+</script>
+</body>
+</html>

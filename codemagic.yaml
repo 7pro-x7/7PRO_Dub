@@ -1,75 +1,189 @@
+# Codemagic CI/CD for 7PRO (native Android, Kotlin/Compose, Gradle 8.13, AGP 8.13.2)
+# NOTE: instance_type is mac_mini_m2 because it is the machine included in the free/personal plan.
+# linux_x2 requires a paid plan and caused: "The selected instance type is not available with the current billing plan."
+# Place this file at the REPOSITORY ROOT (the name must be lowercase: codemagic.yaml).
+#
+# One-time setup in Codemagic UI:
+#   1. Teams > Code signing identities > Android keystores: upload your release keystore
+#      and give it the reference name:  sevenpro_keystore
+#   2. (Optional, for Google Play) Teams > Integrations > Google Play: add a service
+#      account, then uncomment the google_play block below.
+#   3. Replace the email address under publishing.
+
+definitions:
+  env_android: &env_android
+    java: 17
+    vars:
+      PACKAGE_NAME: "com.aca.sevenpro"
+      # versionCode sent to Gradle = BUILD_NUMBER + this offset (current code in repo is 210).
+      # Raise the offset if Google Play ever rejects the code as already used.
+      VERSION_CODE_OFFSET: 210
+      VERSION_NAME: "1.0.10"
+
+  scripts:
+    - &prepare_android
+      name: Prepare Android project
+      script: |
+        set -euo pipefail
+        cd android-7pro
+        chmod +x gradlew
+        # Clear Gradle state that can crash AGP before the project is read
+        # ("Failed to instrument class ... PluginCrashReporter").
+        ./gradlew --stop >/dev/null 2>&1 || true
+        rm -rf .gradle build app/build ../.gradle ../build
+        rm -rf "$HOME/.gradle/caches/"*/generated-gradle-jars 2>/dev/null || true
+        rm -rf "$HOME/.gradle/caches/"*/transforms* 2>/dev/null || true
+        rm -rf "$HOME/.gradle/caches/"*/kotlin-dsl 2>/dev/null || true
+
+    - &write_signing_env
+      name: Map Codemagic signing variables to Gradle
+      script: |
+        set -euo pipefail
+        # build.gradle.kts reads these ANDROID_* variables for release signing.
+        {
+          echo "export ANDROID_KEYSTORE_PATH=\"$CM_KEYSTORE_PATH\""
+          echo "export ANDROID_KEYSTORE_PASSWORD=\"$CM_KEYSTORE_PASSWORD\""
+          echo "export ANDROID_KEY_ALIAS=\"$CM_KEY_ALIAS\""
+          echo "export ANDROID_KEY_PASSWORD=\"$CM_KEY_PASSWORD\""
+        } >> "$CM_ENV"
+        echo "export VERSION_CODE=$((BUILD_NUMBER + VERSION_CODE_OFFSET))" >> "$CM_ENV"
+
 workflows:
-  android-workflow:
-    name: CrashLab Android Build
+  # ------------------------------------------------------------------ Simple APK (NO keystore needed)
+  # Use this one first. Builds an installable APK for your phone/testing.
+  # It is signed with the debug key, so it cannot be uploaded to Google Play.
+  android-apk:
+    name: Android APK (no keystore needed)
+    instance_type: mac_mini_m2
     max_build_duration: 60
-    instance_type: linux_x2
     environment:
-      vars:
-        PACKAGE_NAME: "com.crashlab.analyzer"
-      java: 17
+      <<: *env_android
+    triggering:
+      events: []
     cache:
       cache_paths:
         - $HOME/.gradle/caches
         - $HOME/.gradle/wrapper
-    triggering:
-      events:
-        - push
-        - pull_request
-      branch_patterns:
-        - pattern: "*"
-          include: true
-          source: true
     scripts:
-      - name: Set up local.properties
+      - *prepare_android
+      - name: Check google-services.json
         script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
-
-      - name: Fix gradlew permissions and verify
+          test -f android-7pro/app/google-services.json \
+            || { echo "android-7pro/app/google-services.json is missing"; exit 1; }
+      - name: Build APK
         script: |
-          set -eux
-          echo "Current gradlew permissions:"
-          ls -la ./gradlew
-          echo "Setting executable permissions..."
-          chmod 755 ./gradlew
-          chmod +x ./gradlew
-          echo "Verifying permissions:"
-          ls -la ./gradlew
-          echo "Gradlew permissions fixed successfully"
-
-      - name: Run unit tests
-        script: |
-          set -eux
-          chmod 755 ./gradlew
-          ./gradlew test --stacktrace
-
-      - name: Build debug APK
-        script: |
-          set -eux
-          chmod 755 ./gradlew
-          ./gradlew assembleDebug --stacktrace
-
-      - name: Build release APK (unsigned)
-        script: |
-          set -eux
-          chmod 755 ./gradlew
-          ./gradlew assembleRelease --stacktrace
-
-      - name: Build App Bundle
-        script: |
-          set -eux
-          chmod 755 ./gradlew
-          ./gradlew bundleRelease --stacktrace
-
+          set -euo pipefail
+          cd android-7pro
+          export VERSION_CODE=$((BUILD_NUMBER + VERSION_CODE_OFFSET))
+          set +e
+          ./gradlew :app:assembleRelease --no-daemon --console=plain > /tmp/build.log 2>&1
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            echo "=========== KOTLIN / BUILD ERRORS (send me this part) ==========="
+            grep -E "^e: |error:|Unresolved|What went wrong" /tmp/build.log | sort -u | head -40
+            exit $STATUS
+          fi
     artifacts:
-      - app/build/outputs/apk/**/*.apk
-      - app/build/outputs/bundle/**/*.aab
-      - app/build/outputs/**/mapping.txt
-      - app/build/reports/tests/**
-
+      - android-7pro/app/build/outputs/**/*.apk
     publishing:
       email:
         recipients:
-          - user@example.com
+          - you@example.com   # <-- change me
+        notify:
+          success: true
+          failure: true
+
+  # ------------------------------------------------------------------ Release (Play Store)
+  android-play-store:
+    name: Android Play Store (signed AAB + APK) - needs keystore
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *env_android
+      android_signing:
+        - sevenpro_keystore   # reference name from Code signing identities
+      # groups:
+      #   - sevenpro_secrets  # add here any extra secrets (e.g. SUPABASE keys) if you move them out of .env
+    triggering:
+      events: []              # manual builds only; add `push` here to build automatically
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+    scripts:
+      - *prepare_android
+      - *write_signing_env
+      - name: Check google-services.json
+        script: |
+          test -f android-7pro/app/google-services.json \
+            || { echo "android-7pro/app/google-services.json is missing"; exit 1; }
+      - name: Build release AAB + APK
+        script: |
+          set -euo pipefail
+          cd android-7pro
+          # The AI-tutor model files are downloaded automatically by the preBuild task.
+          set +e
+          ./gradlew :app:bundleRelease :app:assembleRelease --no-daemon --console=plain > /tmp/build.log 2>&1
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            echo "=========== KOTLIN / BUILD ERRORS (send me this part) ==========="
+            grep -E "^e: |error:|Unresolved|What went wrong" /tmp/build.log | sort -u | head -40
+            exit $STATUS
+          fi
+    artifacts:
+      - android-7pro/app/build/outputs/**/*.aab
+      - android-7pro/app/build/outputs/**/*.apk
+      - android-7pro/app/build/outputs/mapping/release/mapping.txt
+      - android-7pro/app/build/outputs/native-debug-symbols/release/*.zip
+    publishing:
+      email:
+        recipients:
+          - you@example.com   # <-- change me
+        notify:
+          success: true
+          failure: true
+      # google_play:
+      #   credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+      #   track: internal            # internal | alpha | beta | production
+      #   submit_as_draft: true
+
+  # ------------------------------------------------------------------ Quick debug APK
+  android-debug:
+    name: Android Debug APK
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      <<: *env_android
+    triggering:
+      events: []
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+    scripts:
+      - *prepare_android
+      - name: Build debug APK
+        script: |
+          set -euo pipefail
+          cd android-7pro
+          export VERSION_CODE=$((BUILD_NUMBER + VERSION_CODE_OFFSET))
+          set +e
+          ./gradlew :app:assembleDebug --no-daemon --console=plain > /tmp/build.log 2>&1
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            echo "=========== KOTLIN / BUILD ERRORS (send me this part) ==========="
+            grep -E "^e: |error:|Unresolved|What went wrong" /tmp/build.log | sort -u | head -40
+            exit $STATUS
+          fi
+    artifacts:
+      - android-7pro/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - you@example.com   # <-- change me
         notify:
           success: true
           failure: true

@@ -1,0 +1,28 @@
+# Web layer
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.28.1
+# Speech → text (MIT)
+faster-whisper==1.1.1
+# Text → text (MIT)
+argostranslate==1.9.6
+# Text → speech (MIT; last MIT-licensed release of rhasspy/piper)
+piper-tts==1.2.0
+# Sentence segmentation (MIT)
+webrtcvad-wheels==2.0.14
+# Voice cloning: OpenVoice V2 (MIT) is installed from git with --no-deps in the Dockerfile,
+# because its own setup.py pins an old faster-whisper. These are the pieces it really needs:
+numpy<2
+librosa==0.10.2.post1
+soundfile==0.12.1
+pydub==0.25.1
+unidecode==1.3.8
+inflect==7.4.0
+eng_to_ipa==0.0.2
+jieba==0.42.1
+pypinyin==0.53.0
+cn2an==0.5.22
+langid==1.1.6
+
+# YouTube source download for dubbing (Unlicense) — check for a newer release before deploying
+yt-dlp==2025.9.26

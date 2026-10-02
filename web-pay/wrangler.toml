@@ -1,0 +1,11 @@
+# 7PRO — صفحة حجز الجروبات وتجديد الاشتراك (Cloudflare Worker + static assets)
+# النشر:  cd web-pay && npx wrangler deploy
+# الرابط بعد النشر:  https://7pro-pay.<your-subdomain>.workers.dev/
+name = "7pro-pay"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+html_handling = "auto-trailing-slash"
+not_found_handling = "single-page-application"

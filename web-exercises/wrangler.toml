@@ -1,0 +1,11 @@
+# 7PRO — صفحة تمارين المعلم (للطلاب المشتركين معاه فقط) + الإعلانات
+# النشر:  cd web-exercises && npx wrangler deploy
+# الرابط بعد النشر:  https://7pro-exercises.<your-subdomain>.workers.dev/
+name = "7pro-exercises"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+html_handling = "auto-trailing-slash"
+not_found_handling = "single-page-application"

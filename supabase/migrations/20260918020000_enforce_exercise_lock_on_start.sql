@@ -1,0 +1,6 @@
+-- is_locked was only a column: nothing stopped a request from starting an attempt on a locked
+-- exercise, so the lock was a visual suggestion rather than a rule. Enforced where attempts
+-- begin. The owning teacher and staff are exempt (they check their own locked work), and a
+-- learner already mid-attempt is let through, so locking never strands someone who had started.
+-- APPLIED DIRECTLY to the live 7pro-x7 project on 2026-09-18 via the Supabase MCP tools.
+-- (Full function body as applied — see project history.)
