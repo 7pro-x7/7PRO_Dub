@@ -24,25 +24,21 @@ workflows:
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
 
-      - name: Fix gradlew permissions
-        script: |
-          chmod +x ./gradlew
-
       - name: Run unit tests
         script: |
-          ./gradlew test --stacktrace
+          bash ./gradlew test --stacktrace
 
       - name: Build debug APK
         script: |
-          ./gradlew assembleDebug --stacktrace
+          bash ./gradlew assembleDebug --stacktrace
 
       - name: Build release APK (unsigned)
         script: |
-          ./gradlew assembleRelease --stacktrace
+          bash ./gradlew assembleRelease --stacktrace
 
       - name: Build App Bundle
         script: |
-          ./gradlew bundleRelease --stacktrace
+          bash ./gradlew bundleRelease --stacktrace
 
     artifacts:
       - app/build/outputs/apk/**/*.apk
